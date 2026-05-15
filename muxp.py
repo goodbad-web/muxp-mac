@@ -235,7 +235,7 @@ class muxpGUI:
             log.error("Version in muxp config file missing!")
             return -2 #error value
         try:
-            self.configversion = int(c['muxpconfigversion'])
+            self.configversion = int(float(c['muxpconfigversion']))
         except ValueError:
             log.error("Config file version is not of type int")
             return -2
@@ -272,7 +272,7 @@ class muxpGUI:
             log.info("Set MUXP folder to: {}".format(self.muxpfolder))
         if "kmlExport" in c:
             try:
-                self.kmlExport = int(c['kmlExport'])
+                self.kmlExport = int(float(c['kmlExport']))
             except ValueError:
                 log.error("kmlExport is not of type int")
                 return -4            
@@ -302,7 +302,7 @@ class muxpGUI:
             self.conflictStrategy = ""
         if "activatePack" in c:
             try:
-                self.activatePack = int(c['activatePack'])
+                self.activatePack = int(float(c['activatePack']))
             except ValueError:
                 log.error("activatePack is not of type int; value not updated")
             log.info("activatePack set to: {}".format(self.activatePack))

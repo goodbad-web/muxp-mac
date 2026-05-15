@@ -1268,8 +1268,8 @@ class muxpArea:
         of the center of the square.
         """
         #### Get index for raster pixel SW (yS, xW) for area to be exported
-        xW = abs(lonW - int(self.dsf.Properties["sim/west"])) * (self.dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
-        yS = abs(latS - int(self.dsf.Properties["sim/south"])) * (self.dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        xW = abs(lonW - int(float(self.dsf.Properties["sim/west"]))) * (self.dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yS = abs(latS - int(float(self.dsf.Properties["sim/south"]))) * (self.dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
         if self.dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
             xW = round(xW, 0)
             yS = round(yS, 0)
@@ -1277,8 +1277,8 @@ class muxpArea:
         yS = int(yS) 
         
         #### Get index for raster pixel NE (yN, xE) for area to be exported
-        xE = abs(lonE - int(self.dsf.Properties["sim/west"])) * (self.dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
-        yN = abs(latN - int(self.dsf.Properties["sim/south"])) * (self.dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        xE = abs(lonE - int(float(self.dsf.Properties["sim/west"]))) * (self.dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yN = abs(latN - int(float(self.dsf.Properties["sim/south"]))) * (self.dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
         Rcentricity = "point-centric"
         if self.dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
             xE = round(xE, 0)
@@ -1290,10 +1290,10 @@ class muxpArea:
         #### Define relevant info for raster to be used later ####
         Rwidth = self.dsf.Raster[0].width
         xstep = 1 / (Rwidth - 1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
-        xbase = int(self.dsf.Properties["sim/west"])
+        xbase = int(float(self.dsf.Properties["sim/west"]))
         Rheight = self.dsf.Raster[0].height
         ystep = 1 / (Rheight -1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
-        ybase = int(self.dsf.Properties["sim/south"])
+        ybase = int(float(self.dsf.Properties["sim/south"]))
         if Rcentricity == "post-centric": #if post-centricity we have to move dem pixel half width/hight to left/down in order to get pixel center on border of dsf tile
             cx = 0.5 * xstep 
             cy = 0.5 * ystep
