@@ -415,8 +415,8 @@ class muxpGUI:
     def select_muxpfile(self, entry, filename=None):
         # if file is set it is directly displayed
         if filename is None:
-            filename = askopenfilename(filetypes=[("MUXP files", ".muxp"), ("kml files", "muxp.kml"), ("WED files", "wed.xml"),
-                                                  ("YAML files", "muxp.yaml"), ("all files", "*")])
+            filename = askopenfilename(filetypes=[("MUXP files", "*.muxp"), ("kml files", "*.kml"), ("WED files", "*.xml"),
+                                                  ("YAML files", "*.yaml"), ("all files", "*")])
             if not filename:
                 return
 

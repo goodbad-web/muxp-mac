@@ -154,12 +154,12 @@ def validate_muxp(d, logname):
             err = "area argument {} is not a float.".format(i+1)
             log.error(err)
             return -4, err
-        if i < 2 and not longitude <=  d["area"][i] <= longitude + 1:
-            err = "area argument {} is outside defined tile definition for longitude".format(i+1)
+        if i < 2 and not latitude <=  d["area"][i] <= latitude + 1:
+            err = "area argument {} is outside defined tile definition for latitude".format(i+1)
             log.error(err)
             return -4, err
-        if i >= 2 and not latitude <=  d["area"][i] <= latitude + 1:
-            err = "area argument {} is outside defined tile definition for latitude".format(i+1)
+        if i >= 2 and not longitude <=  d["area"][i] <= longitude + 1:
+            err = "area argument {} is outside defined tile definition for longitude".format(i+1)
             log.error(err)
             return -4, err        
     if i != 3:

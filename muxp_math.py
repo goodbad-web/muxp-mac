@@ -235,12 +235,12 @@ def segmentToBox(p1, p2, w):
     degree_dist_at_equator = 111120 #for longitude (or 111300?)
     lat_degree_dist_average = 111000
     degree_dist_at_lat = cos (radians(p1[0])) * degree_dist_at_equator
-    if round (p1[1], 6) == round (p2[1], 6): #segement exactly east-west direction
-        dx = 0   #difference for longitute in meters to reach corner from center end
-        dy = w/2 #difference for latitude in meters to reach corner from center end
-    elif round (p1[0], 6) == round (p2[0], 6): #segment is exactly north-south direction
-        dx = w/2
-        dy = 0
+    if round (p1[1], 6) == round (p2[1], 6): #segment exactly north-south direction
+        dx = w/2 #difference for longitude in meters to reach corner from center end
+        dy = 0   #difference for latitude in meters to reach corner from center end
+    elif round (p1[0], 6) == round (p2[0], 6): #segment is exactly east-west direction
+        dx = 0
+        dy = w/2
     else:
         m = -1 / ((lat2y(p2[0]) - lat2y(p1[0])) / (lon2x(p2[1]) - lon2x(p1[1])))  # gradient of perpendicular line
         # NEW 04.08.2020 Above gradient is calculated in Mercartor projection to have equal of angle
