@@ -46,19 +46,19 @@ def kmlExport2(dsf, boundaries, extract, filename):
     latS, latN, lonW, lonE = BoundingRectangle(all_vertices)
     # Make sure that bounds stay inside 1x1 grid
     # NEW 05.06.21: if conditions of lon/lat not rounded to int + assign full end coords no +/- 0.0000001
-    if lonE > int(dsf.Properties["sim/east"]):
-        lonE = int(dsf.Properties["sim/east"])  # - 0.0000001
-    if lonW < int(dsf.Properties["sim/west"]):
-        lonW = int(dsf.Properties["sim/west"])  # + 0.0000001
-    if latN > int(dsf.Properties["sim/north"]):
-        latN = int(dsf.Properties["sim/north"])  # - 0.0000001
-    if latS < int(dsf.Properties["sim/south"]):
-        latS = int(dsf.Properties["sim/south"])  # + 0.0000001
+    if lonE > int(float(dsf.Properties["sim/east"])):
+        lonE = int(float(dsf.Properties["sim/east"]))  # - 0.0000001
+    if lonW < int(float(dsf.Properties["sim/west"])):
+        lonW = int(float(dsf.Properties["sim/west"]))  # + 0.0000001
+    if latN > int(float(dsf.Properties["sim/north"])):
+        latN = int(float(dsf.Properties["sim/north"]))  # - 0.0000001
+    if latS < int(float(dsf.Properties["sim/south"])):
+        latS = int(float(dsf.Properties["sim/south"]))  # + 0.0000001
 
     #### Get index for raster pixel SW (yS, xW) for area to be exported
     if len(dsf.Raster):  # check if dsf file has Raster definition, and skip this part if not
-        xW = abs(lonW - int(dsf.Properties["sim/west"])) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
-        yS = abs(latS - int(dsf.Properties["sim/south"])) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        xW = abs(lonW - int(float(dsf.Properties["sim/west"]))) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yS = abs(latS - int(float(dsf.Properties["sim/south"]))) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
         if dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
             xW = round(xW, 0)
             yS = round(yS, 0)
@@ -66,8 +66,8 @@ def kmlExport2(dsf, boundaries, extract, filename):
         yS = int(yS)
 
         #### Get index for raster pixel NE (yN, xE) for area to be exported
-        xE = abs(lonE - int(dsf.Properties["sim/west"])) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
-        yN = abs(latN - int(dsf.Properties["sim/south"])) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+        xE = abs(lonE - int(float(dsf.Properties["sim/west"]))) * (dsf.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+        yN = abs(latN - int(float(dsf.Properties["sim/south"]))) * (dsf.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
         Rcentricity = "point-centric"
         if dsf.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
             xE = round(xE, 0)
@@ -79,10 +79,10 @@ def kmlExport2(dsf, boundaries, extract, filename):
         #### Define relevant info for raster to be used later ####
         Rwidth = dsf.Raster[0].width
         xstep = 1 / (Rwidth - 1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
-        xbase = int(dsf.Properties["sim/west"])
+        xbase = int(float(dsf.Properties["sim/west"]))
         Rheight = dsf.Raster[0].height
         ystep = 1 / (Rheight -1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
-        ybase = int(dsf.Properties["sim/south"])
+        ybase = int(float(dsf.Properties["sim/south"]))
 
 
 

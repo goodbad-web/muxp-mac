@@ -689,49 +689,49 @@ class muxpArea:
             # poly.append(poly[0])  # for calculation below make sure that polygon is closed; seems not to be needed
         i = 0  # first point of list is now definitely inside tile
         while i < len(poly):  # assuming closed polygon with first equals last point in list
-            if poly[i][0] > int(self.dsf.Properties["sim/east"]):
+            if poly[i][0] > int(float(self.dsf.Properties["sim/east"])):
                 if i > 0:  # we have been inside tile before, so there is a cut
                     self.log.warning("Poly exits at point {} current tile to the east, will be cut!".format(i))
-                    poly.insert(i, intersection(poly[i-1], poly[i], [int(self.dsf.Properties["sim/east"]), -91], [int(self.dsf.Properties["sim/east"]), 91]))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [int(float(self.dsf.Properties["sim/east"])), -91], [int(float(self.dsf.Properties["sim/east"])), 91]))
                     i += 1
-                while i < len(poly) and poly[i][0] > int(self.dsf.Properties["sim/east"]):
+                while i < len(poly) and poly[i][0] > int(float(self.dsf.Properties["sim/east"])):
                     last_point = [poly[i][0], poly[i][1]]
                     del poly[i]
                 if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
-                    poly.insert(i, intersection(last_point, poly[i], [int(self.dsf.Properties["sim/east"]), -91], [int(self.dsf.Properties["sim/east"]), 91]))
+                    poly.insert(i, intersection(last_point, poly[i], [int(float(self.dsf.Properties["sim/east"])), -91], [int(float(self.dsf.Properties["sim/east"])), 91]))
                 i += 1
-            elif poly[i][0] < int(self.dsf.Properties["sim/west"]):
+            elif poly[i][0] < int(float(self.dsf.Properties["sim/west"])):
                 if i > 0:  # we have been inside tile before, so there is a cut
                     self.log.warning("Poly exits at point {} current tile to the west, will be cut!".format(i))
-                    poly.insert(i, intersection(poly[i-1], poly[i], [int(self.dsf.Properties["sim/west"]), -91], [int(self.dsf.Properties["sim/west"]), 91]))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [int(float(self.dsf.Properties["sim/west"])), -91], [int(float(self.dsf.Properties["sim/west"])), 91]))
                     i += 1
-                while i < len(poly) and poly[i][0] < int(self.dsf.Properties["sim/west"]):
+                while i < len(poly) and poly[i][0] < int(float(self.dsf.Properties["sim/west"])):
                     last_point = [poly[i][0], poly[i][1]]
                     del poly[i]
                 if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
-                    poly.insert(i, intersection(last_point, poly[i], [int(self.dsf.Properties["sim/west"]), -91], [int(self.dsf.Properties["sim/west"]), 91]))
+                    poly.insert(i, intersection(last_point, poly[i], [int(float(self.dsf.Properties["sim/west"])), -91], [int(float(self.dsf.Properties["sim/west"])), 91]))
                 i += 1
-            elif poly[i][1] > int(self.dsf.Properties["sim/north"]):
+            elif poly[i][1] > int(float(self.dsf.Properties["sim/north"])):
                 if i > 0:  # we have been inside tile before, so there is a cut
                     self.log.warning("Poly exits at point {} current tile to the north, will be cut!".format(i))
-                    poly.insert(i, intersection(poly[i-1], poly[i], [-181, int(self.dsf.Properties["sim/north"])], [181, int(self.dsf.Properties["sim/north"])]))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [-181, int(float(self.dsf.Properties["sim/north"]))], [181, int(float(self.dsf.Properties["sim/north"]))]))
                     i += 1
-                while i < len(poly) and poly[i][1] > int(self.dsf.Properties["sim/north"]):
+                while i < len(poly) and poly[i][1] > int(float(self.dsf.Properties["sim/north"])):
                     last_point = [poly[i][0], poly[i][1]]
                     del poly[i]
                 if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
-                    poly.insert(i, intersection(last_point, poly[i], [-181, int(self.dsf.Properties["sim/north"])], [181, int(self.dsf.Properties["sim/north"])]))
+                    poly.insert(i, intersection(last_point, poly[i], [-181, int(float(self.dsf.Properties["sim/north"]))], [181, int(float(self.dsf.Properties["sim/north"]))]))
                 i += 1
-            elif poly[i][1] < int(self.dsf.Properties["sim/south"]):
+            elif poly[i][1] < int(float(self.dsf.Properties["sim/south"])):
                 if i > 0:  # we have been inside tile before, so there is a cut
                     self.log.warning("Poly exits at point {} current tile to the south, will be cut!".format(i))
-                    poly.insert(i, intersection(poly[i-1], poly[i], [-181, int(self.dsf.Properties["sim/south"])], [181, int(self.dsf.Properties["sim/south"])]))
+                    poly.insert(i, intersection(poly[i-1], poly[i], [-181, int(float(self.dsf.Properties["sim/south"]))], [181, int(float(self.dsf.Properties["sim/south"]))]))
                     i += 1
-                while i < len(poly) and poly[i][1] < int(self.dsf.Properties["sim/south"]):
+                while i < len(poly) and poly[i][1] < int(float(self.dsf.Properties["sim/south"])):
                     last_point = [poly[i][0], poly[i][1]]
                     del poly[i]
                 if i < len(poly):  # if we have at the end been outside of tile, then last point was deleted and no intersection exists
-                    poly.insert(i, intersection(last_point, poly[i], [-181, int(self.dsf.Properties["sim/south"])], [181, int(self.dsf.Properties["sim/south"])]))
+                    poly.insert(i, intersection(last_point, poly[i], [-181, int(float(self.dsf.Properties["sim/south"]))], [181, int(float(self.dsf.Properties["sim/south"]))]))
                 i += 1
             else:
                 i += 1

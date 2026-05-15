@@ -133,8 +133,8 @@ def validate_muxp(d, logname):
         return -5, err
     ### Extract and validate tile defined
     try:
-        longitude = int(d["tile"][:3])
-        latitude = int(d["tile"][3:])
+        longitude = int(float(d["tile"][:3]))
+        latitude = int(float(d["tile"][3:]))
     except ValueError:
         err = "Tile definition must be of form +xx+yyy (xx = longitude, yyy=latitude, + could also be -)"
         log.error(err)
@@ -203,7 +203,7 @@ def validate_muxp(d, logname):
                             skipped_commands.add(i)
                     if val_type == "int": 
                         try:
-                            d["commands"][i][parameter][t] = int(c[parameter][t])
+                            d["commands"][i][parameter][t] = int(float(c[parameter][t]))
                         except ValueError:
                             log.error("Command {}: For {}. element of parameter {} wrong type (int would be required), command {} skipped.".format(i+1, t+1, parameter, c["_command_info"]))
                             skipped_commands.add(i)
@@ -230,7 +230,7 @@ def validate_muxp(d, logname):
                                 skipped_commands.add(i)
                         if val_type == "int":  
                                 try:
-                                    d["commands"][i][parameter][j][t] = int(listline[t])
+                                    d["commands"][i][parameter][j][t] = int(float(listline[t]))
                                 except ValueError:
                                     log.info("     listline: {}".format(listline))
                                     log.error("Command {}: For {}. element in line {} of list {} wrong type (int would be required), command {} skipped.".format(i+1, t+1, j+1, parameter, c["_command_info"]))
@@ -272,9 +272,9 @@ def get10grid(tile):
         else:         ######### if it stays always with s=4.99 the whole function can be simplified !!! ############
             s = 4.99
         if len(tile_part) == 3:
-            grid10 += "{0:+03d}".format(round((int(tile_part)-s)/10)*10)
+            grid10 += "{0:+03d}".format(round((int(float(tile_part))-s)/10)*10)
         else:
-            grid10 += "{0:+04d}".format(round((int(tile_part)-s)/10)*10)
+            grid10 += "{0:+04d}".format(round((int(float(tile_part))-s)/10)*10)
     return grid10
         
 
@@ -293,9 +293,11 @@ def findDSFmeshFiles(tile, xpfolder, logname):
 
     if tile != None: #search packs for a specific tile
         grid10 = get10grid(tile)
-        ########## TBD: Define all such folders as global variable to be easily changable ###############
-        if path.exists(xpfolder +  "/Global Scenery/X-Plane 11 Global Scenery/Earth nav data/" + grid10 + "/" + tile + ".dsf"):  
-            packs["Global Scenery/X-Plane 11 Global Scenery"] = "DEFAULT"
+        for xp_ver in ["12", "11"]:
+            gs_path = "Global Scenery/X-Plane {} Global Scenery".format(xp_ver)
+            if path.exists(xpfolder + "/" + gs_path + "/Earth nav data/" + grid10 + "/" + tile + ".dsf"):
+                packs[gs_path] = "DEFAULT"
+                break
         for (_, dirs, _) in walk(xpfolder+"/Custom Scenery/"):
             break
         for scenery in dirs:
@@ -311,7 +313,11 @@ def findDSFmeshFiles(tile, xpfolder, logname):
                     elif props["sim/overlay"] == '0': #In case such a definition would exist.....
                         packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
     else: #search for any mesh packs
-        packs["Global Scenery/X-Plane 11 Global Scenery"] = "DEFAULT"  #For all Tiles DEFAULT is allways an option
+        for xp_ver in ["12", "11"]:
+            gs_path = "Global Scenery/X-Plane {} Global Scenery".format(xp_ver)
+            if path.exists(xpfolder + "/" + gs_path):
+                packs[gs_path] = "DEFAULT"
+                break
         for scenery in next(walk(xpfolder+"/Custom Scenery/"))[1]: #get all scenery pack folders in Custom Secenery
             next_pack = False
             for (root, dirs, files) in walk(xpfolder+"/Custom Scenery/"+scenery):
@@ -382,7 +388,11 @@ def find_preferred_pack(preferred, available, muxpfolder):
         if p == "DEFAULT":
             if muxpfolder[muxpfolder.find("Custom Scenery"):] in available:  # when tile in muxpfolder, this is also changed DEFAULT
                 matching_packs.append(muxpfolder[muxpfolder.find("Custom Scenery"):])  # Convert MUXP-folder to pack
-            matching_packs.append("Global Scenery/X-Plane 11 Global Scenery")  #### TBD: Define this string globally!!!"
+            for xp_ver in ["12", "11"]:
+                gs_path = "Global Scenery/X-Plane {} Global Scenery".format(xp_ver)
+                if gs_path in available:
+                    matching_packs.append(gs_path)
+                    break
             continue
         p_type, p_value = p.split('=')
         if p_type == "pack":  ######### TBD: if p_type cases for hash=x76h.... or agent=LR... #####################
@@ -494,7 +504,7 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
                     if v[4] == icao_id or icao_id =='': #if no icao id is given just first airport is selected
                         Airport = True
                         icao_id = v[4] #set now icao id in case it was '' before
-                        apt_elev = round(int(v[1]) * 0.3048)
+                        apt_elev = round(int(float(v[1])) * 0.3048)
                         apt_name = " ".join(v[5:])
                         log.info("Airport {} found with elevation {} m.".format(apt_name, apt_elev))
                     else:
@@ -511,7 +521,7 @@ def apt2muxp(filename, muxpfolder, logname, icao_id="", meshtype="TIN"):
                     log.info("Runway from {}, {} to {}, {} with width {} found".format(v[9], v[10], v[18], v[19], v[1]))
                     runways.append( [(float(v[9]), float(v[10])), (float(v[18]), float(v[19])), float(v[1]) ])
                 elif v[0] == '1302' and v[1] == 'flatten':
-                    apt_flatten = int(v[2])
+                    apt_flatten = int(float(v[2]))
                     log.warning("Airport includes flatten flag set to: {}".format(apt_flatten))
                 elif BoundarySection:
                     if v[0] == '111' or v[0] == '112':

@@ -1,7 +1,7 @@
 # Mesh Updater X-Plane (MUXP)
 ![muxp overview](https://github.com/nofaceinbook/muxp/blob/master/doc/images/MUXP_LOGO_small.jpg)
 
-This program allows to update the mesh files (.dsf-files) for X-Plane 11.
+This program allows to update the mesh files (.dsf-files) for X-Plane 12.
 ![muxp overview](https://github.com/nofaceinbook/muxp/blob/master/doc/images/MuxpBeforeAfterYYR.JPG)
 
 As shown in this picture you can adapt the mesh e.g. to prepare the terrain for a new runway or even change the terrain like adding lakes.

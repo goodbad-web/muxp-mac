@@ -887,15 +887,15 @@ class XPLNEDSF:
                                               
   
     def getVertexElevation(self, x, y, z = -32768): #gets Elevation at point (x,y) from raster grid Elevation or from Vertex itself if assigned to vertex
-        if int(z) != -32768: #in case z vertex is different from -32768 than this is the right height and not taken from raster
+        if int(float(z)) != -32768: #in case z vertex is different from -32768 than this is the right height and not taken from raster
             return z
         if "sim/west" not in self.Properties:
             self._log_.error("Cannot get elevation as properties like sim/west not defined!!!")
             return None
-        if not (int(self.Properties["sim/west"]) <= x <= int(self.Properties["sim/east"])):
+        if not (int(float(self.Properties["sim/west"])) <= x <= int(float(self.Properties["sim/east"]))):
             self._log_.error("Cannot get elevation as x coordinate is not within boundaries!!!")
             return None
-        if not (int(self.Properties["sim/south"]) <= y <= int(self.Properties["sim/north"])):
+        if not (int(float(self.Properties["sim/south"])) <= y <= int(float(self.Properties["sim/north"]))):
             self._log_.error("Cannot get elevation as y coordinate is not within boundaries!!!")
             return None
         if len(self.DefRasters) == 0: #No raster defined, use elevation from trias  #### NEW 7 ####
@@ -904,8 +904,8 @@ class XPLNEDSF:
         else: # use raster to get elevation; THIS VERSION IS ASSUMING THAT ELEVATION RASTER IS THE FIRST RASTER-LAYER (index 0), if it is not called "elevation" a warning is raised ###
             if self.DefRasters[0] != "elevation":
                 self._log_.warning("Warning: The first raster layer is not called elevation, but used to determine elevation!")
-            x = abs(x - int(self.Properties["sim/west"])) * (self.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
-            y = abs(y - int(self.Properties["sim/south"])) * (self.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
+            x = abs(x - int(float(self.Properties["sim/west"]))) * (self.Raster[0].width - 1) # -1 from widht required, because pixels cover also boundaries of dsf lon/lat grid
+            y = abs(y - int(float(self.Properties["sim/south"]))) * (self.Raster[0].height - 1) # -1 from height required, because pixels cover also boundaries of dsf lon/lat grid
             if self.Raster[0].flags & 4: #when bit 4 is set, then the data is stored post-centric, meaning the center of the pixel lies on the dsf-boundaries, rounding should apply
                 x = round(x, 0)
                 y = round(y, 0)
