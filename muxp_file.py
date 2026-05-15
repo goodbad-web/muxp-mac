@@ -133,8 +133,14 @@ def validate_muxp(d, logname):
         return -5, err
     ### Extract and validate tile defined
     try:
-        longitude = int(float(d["tile"][:3]))
-        latitude = int(float(d["tile"][3:]))
+        # Split by the second sign (+ or -) to handle variable length coordinates
+        tile_str = d["tile"]
+        second_sign_pos = tile_str.find('+', 1)
+        if second_sign_pos == -1:
+            second_sign_pos = tile_str.find('-', 1)
+        
+        latitude = int(float(tile_str[:second_sign_pos]))
+        longitude = int(float(tile_str[second_sign_pos:]))
     except ValueError:
         err = "Tile definition must be of form +xx+yyy (xx = longitude, yyy=latitude, + could also be -)"
         log.error(err)
@@ -266,7 +272,12 @@ def get10grid(tile):
     returns for a tile definition string like -122+47 the 10 rounded string -130+40 
     """
     grid10 = ""
-    for tile_part in [tile[:3], tile[3:]]:
+    # Split by the second sign (+ or -) to handle variable length coordinates
+    second_sign_pos = tile.find('+', 1)
+    if second_sign_pos == -1:
+        second_sign_pos = tile.find('-', 1)
+        
+    for tile_part in [tile[:second_sign_pos], tile[second_sign_pos:]]:
         if tile_part[0] == '-':
             s = 4.99  # was before 5, but then -150 would be converted to -160, but it stays in -150 10grid
         else:         ######### if it stays always with s=4.99 the whole function can be simplified !!! ############
@@ -295,13 +306,20 @@ def findDSFmeshFiles(tile, xpfolder, logname):
         grid10 = get10grid(tile)
         for xp_ver in ["12", "11"]:
             gs_path = "Global Scenery/X-Plane {} Global Scenery".format(xp_ver)
-            if path.exists(xpfolder + "/" + gs_path + "/Earth nav data/" + grid10 + "/" + tile + ".dsf"):
+            dsf_file = xpfolder + "/" + gs_path + "/Earth nav data/" + grid10 + "/" + tile + ".dsf"
+            if not path.exists(dsf_file):
+                if path.exists(dsf_file + ".7z"):
+                    dsf_file = dsf_file + ".7z"
+            if path.exists(dsf_file):
                 packs[gs_path] = "DEFAULT"
                 break
         for (_, dirs, _) in walk(xpfolder+"/Custom Scenery/"):
             break
         for scenery in dirs:
             dsf_file = xpfolder + "/Custom Scenery/" + scenery + "/Earth nav data/" + grid10 + "/" + tile + ".dsf"
+            if not path.exists(dsf_file):
+                if path.exists(dsf_file + ".7z"):
+                    dsf_file = dsf_file + ".7z"
             if path.exists(dsf_file):
                 err, props = getDSFproperties(dsf_file)
                 if err:

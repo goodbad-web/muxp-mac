@@ -37,6 +37,7 @@ from hashlib import md5 #required for md5 hash in dsf file footer
 from logging import StreamHandler, getLogger, Formatter #for output to console and/or file
 from io import BytesIO #required to go through bytes of a read 7ZIP-File
 from math import sin, cos, sqrt, atan2, radians # for distance calculation etc.
+import numpy as np
 
 try:
     import py7zr
@@ -480,16 +481,23 @@ class XPLNEDSF:
             if len(V[p][0]) != len(Scalings[p]): #take first vertex as example to determine number of coordinate planes in current pool
                 self._log_.error("Amount of scale values for pool {} does not equal the number of coordinate planes!!!".format(p))
                 return 2
+            
+            # Vectorized scaling using NumPy
+            v_arr = np.array(V[p], dtype=np.float64)
             for n in range(len(Scalings[p])): #for all scale tuples for that pool = all coordinate planes in pool
-                if self._DEBUG_: self._log_.debug("Will now scale pool {} plane {} with multiplier: {} and offset: {}".format(p, n ,Scalings[p][n][0], Scalings[p][n][1]))                              
-                if float(Scalings[p][n][0]) == 0.0:
+                m, o = Scalings[p][n]
+                if self._DEBUG_: self._log_.debug("Will now scale pool {} plane {} with multiplier: {} and offset: {}".format(p, n , m, o))                              
+                if m == 0.0:
                     if self._DEBUG_: self._log_.debug("   Plane will not be scaled because scale is 0!")
                     continue
-                for v in range(len(V[p])): #for all vertices in current plane
-                    if reverse: #de-scale vertices
-                        V[p][v][n] = round((V[p][v][n] - Scalings[p][n][1]) * max_int / Scalings[p][n][0])   #de-scale vertex v in pool p for plane n by subtracting offset and dividing by multiplyer
-                    else:  #scale vertices
-                        V[p][v][n] = (V[p][v][n] * Scalings[p][n][0] / max_int) + Scalings[p][n][1]  #scale vertex v in pool p for plane n with multiplyer and offset
+                if reverse: #de-scale vertices
+                    v_arr[:, n] = np.round((v_arr[:, n] - o) * max_int / m)
+                else:  #scale vertices
+                    v_arr[:, n] = (v_arr[:, n] * m / max_int) + o
+            if reverse:
+                V[p] = v_arr.astype(np.int64).tolist()
+            else:
+                V[p] = v_arr.tolist()
                
                 
     def _extractRaster_(self):  #extracts alll rasters from atoms and stores them in list
@@ -996,7 +1004,8 @@ class XPLNEDSF:
                     f.seek(0)
                     with py7zr.SevenZipFile(f, mode='r') as archive:
                         filename = archive.getnames()[0]
-                        filedata = archive.readall()[filename].read()
+                        all_files = archive.read(targets=[filename])
+                        filedata = all_files[filename].read()
                     self._log_.info("File is 7Zip archive. Extracted and read file {} from archive with decompressed length {}.".format(filename, len(filedata)))
                     # f.close()  # No need to close here if we use BytesIO later or if it's handled by context
                     f = BytesIO(filedata)
@@ -1096,7 +1105,7 @@ def isDSFoverlay(file):
                 f.seek(0)
                 with py7zr.SevenZipFile(f, mode='r') as archive:
                     filename = archive.getnames()[0]
-                    filedata = archive.readall()[filename].read()
+                    filedata = archive.read(targets=[filename])[filename].read()
                 f = BytesIO(filedata)
                 flength = len(filedata) #also update to decompressed length
                 start = f.read(12)
@@ -1133,7 +1142,7 @@ def getDSFproperties(file):
                 f.seek(0)
                 with py7zr.SevenZipFile(f, mode='r') as archive:
                     filename = archive.getnames()[0]
-                    filedata = archive.readall()[filename].read()
+                    filedata = archive.read(targets=[filename])[filename].read()
                 f = BytesIO(filedata)
                 flength = len(filedata)  # also update to decompressed length
                 start = f.read(12)

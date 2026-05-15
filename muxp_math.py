@@ -147,28 +147,18 @@ def isPointInTria(p, t, epsilon=0): #delivers True if p lies in t, else False
 
 def PointInPoly(p, poly):
     """
-    Test wether a point p with [lat, lon] coordinates lies in polygon (list of [lat, lon] pairs and retruns True or False.
-    Counts number of intersections from point outside poly to p on same y-coordinate, if it is odd the point lies in poly.
-    To avoid intersection at vertex of poly on same y-coordinate, such points are shifte about 1mm above for testing intersection.
+    Test wether a point p with [lon, lat] coordinates lies in polygon (list of [lon, lat] pairs) and returns True or False.
+    Optimized ray casting algorithm.
     """
-    count = 0
-    for i in range(len(poly) - 1):  # for all segments in poly
-        epsilon0, epsilon1 = (0, 0)  # added to p's y coordinate in case p is on same y-coordinate than according vertex of segment
-        if poly[i][1] < p[1] and poly[i + 1][1] < p[1]:  # if vertices of segment below y-coordinate of p, no intersection
-            continue
-        if poly[i][1] > p[1] and poly[i + 1][1] > p[1]:  # if vertices of segment above y-coordinate of p, no intersection
-            continue
-        if poly[i][1] == p[1]:
-            epsilon0 = 0.00000001
-        if poly[i + 1][1] == p[1]:
-            epsilon1 = 0.00000001
-        x = intersection([poly[i][0], poly[i][1] + epsilon0], [poly[i + 1][0], poly[i + 1][1] + epsilon1], [181, p[1]], p)
-        if x:
-            count += 1
-    if count % 2:
-        return True  # odd number of intersections, so p in poly
-    else:
-        return False  # even number of intersection, so p outside poly
+    x, y = p[0], p[1]
+    inside = False
+    for i in range(len(poly) - 1):
+        x1, y1 = poly[i]
+        x2, y2 = poly[i+1]
+        if ((y1 > y) != (y2 > y)) and \
+           (x < (x2 - x1) * (y - y1) / (y2 - y1) + x1):
+            inside = not inside
+    return inside
 
 def edgeInPoly(p, q, poly):
     """

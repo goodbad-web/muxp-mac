@@ -50,35 +50,45 @@ class muxpArea:
         """
         self.log.info("Extracting area latS: {}, latN: {}, lonW: {}, lonE:{} from dsf.".format(latS, latN, lonW, lonE))
         triaCount = 0 #counts all trias in dsf
-        for p in self.dsf.Patches:
+        for current_patch_index, p in enumerate(self.dsf.Patches):
             trias = p.triangles()
             tremoved = [] #trias that should be removed
             for t in trias:
                 # get for each tria the bounding rectangle in miny, maxy, minx, maxxx
-                minx = min(self.dsf.V[t[0][0]][t[0][1]][0], self.dsf.V[t[1][0]][t[1][1]][0], self.dsf.V[t[2][0]][t[2][1]][0])
-                maxx = max(self.dsf.V[t[0][0]][t[0][1]][0], self.dsf.V[t[1][0]][t[1][1]][0], self.dsf.V[t[2][0]][t[2][1]][0])
-                miny = min(self.dsf.V[t[0][0]][t[0][1]][1], self.dsf.V[t[1][0]][t[1][1]][1], self.dsf.V[t[2][0]][t[2][1]][1])
-                maxy = max(self.dsf.V[t[0][0]][t[0][1]][1], self.dsf.V[t[1][0]][t[1][1]][1], self.dsf.V[t[2][0]][t[2][1]][1])
+                v0 = self.dsf.V[t[0][0]][t[0][1]]
+                v1 = self.dsf.V[t[1][0]][t[1][1]]
+                v2 = self.dsf.V[t[2][0]][t[2][1]]
+                
+                minx = min(v0[0], v1[0], v2[0])
+                maxx = max(v0[0], v1[0], v2[0])
+                miny = min(v0[1], v1[1], v2[1])
+                maxy = max(v0[1], v1[1], v2[1])
+                
                 #now check if bounding rectangle of tria intersects with area
                 if not (minx < lonW and maxx < lonW): #x-range of box is not completeley West of area     
                     if not (minx > lonE and maxx > lonE): #x-range of box is not completele East of area
                         if not (miny < latS and maxy < latS): #y-range is not completele South of area
                             if not (miny > latN and maxy > latN): #y-range is not conmpletele North of ares
-                                ### NEW 15.08.20: DEEPCOPY 2 LINES BELOW TO HAVE REALLY UNIQUE VERTICES NOT RELATING TO SAME IN DSF !!!
-                                self.atrias.append([deepcopy(self.dsf.V[t[0][0]][t[0][1]]), deepcopy(self.dsf.V[t[1][0]][t[1][1]]), deepcopy(self.dsf.V[t[2][0]][t[2][1]])])
-                                self.atrias[-1].extend(deepcopy(t))  #so we have an intersection of tria box with area and append the tria
-                                self.atrias[-1].append(self.dsf.Patches.index(p))
-                                current_patch_index = self.dsf.Patches.index(p)
+                                # Using slice [:] instead of deepcopy for simple float lists
+                                self.atrias.append([v0[:], v1[:], v2[:]])
+                                self.atrias[-1].extend(t[:])  # t is list of indices, slice is enough
+                                self.atrias[-1].append(current_patch_index)
                                 self.apatches.add(current_patch_index)
-                                ### self.log.info("Scaling: {}   just multiplier: {}".format(self.dsf.Scalings[t[0][0]], self.dsf.Scalings[t[0][0]][0]))
-                                self.elevation_scalings[(self.dsf.Scalings[t[0][0]][2][0], self.dsf.Scalings[t[0][0]][2][1])] = current_patch_index
-                                self.elevation_scalings[(self.dsf.Scalings[t[1][0]][2][0], self.dsf.Scalings[t[1][0]][2][1])] = current_patch_index
-                                self.elevation_scalings[(self.dsf.Scalings[t[2][0]][2][0], self.dsf.Scalings[t[2][0]][2][1])] = current_patch_index
+                                
+                                # Cache scalings for performance
+                                s0 = self.dsf.Scalings[t[0][0]][2]
+                                s1 = self.dsf.Scalings[t[1][0]][2]
+                                s2 = self.dsf.Scalings[t[2][0]][2]
+                                self.elevation_scalings[(s0[0], s0[1])] = current_patch_index
+                                self.elevation_scalings[(s1[0], s1[1])] = current_patch_index
+                                self.elevation_scalings[(s2[0], s2[1])] = current_patch_index
                                 tremoved.append(t)
                                 self.log.debug("Tria {} with latS: {}  latN: {}  lonW: {} and lonE: {} in area.".format(t, miny, maxy, minx, maxx))
                 triaCount += 1
-            for t in tremoved:
-                trias.remove(t)
+            if tremoved:
+                # Use list comprehension for much faster removal than list.remove() in a loop
+                tremoved_set = set(tuple(tuple(x) for x in tria) for tria in tremoved)
+                trias = [t for t in trias if tuple(tuple(x) for x in t) not in tremoved_set]
             p.trias2cmds(trias) #updates dsf patch with trias not including removed ones
         self.log.info("  ... dsf has {} trias and {} trias from {} different patches are now in the extracted area.".format(triaCount, len(self.atrias), len(self.apatches)))
         self.elev_factor_min, self.elev_base_min = (999999, 999999)  # start with high numbers for searching for min

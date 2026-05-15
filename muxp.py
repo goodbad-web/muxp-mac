@@ -29,13 +29,55 @@ from muxp_file import *
 from muxp_KMLexport import *
 from xplnedsf2 import *
 from wed_conv import MUXP
-from os import path, remove, mkdir, sep, replace, walk
+from os import path, remove, mkdir, makedirs, sep, replace, walk
 from shutil import copyfile, copy2
 
 from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
 from sys import argv, exit
 from glob import glob
+from multiprocessing import Pool, cpu_count
+from functools import partial
+
+# Worker functions for multiprocessing
+def update_elevation_worker(chunk, poly, elevation):
+    # Pre-calculate bounding box for polygon
+    poly_lons = [v[0] for v in poly]
+    poly_lats = [v[1] for v in poly]
+    p_min_lon, p_max_lon = min(poly_lons), max(poly_lons)
+    p_min_lat, p_max_lat = min(poly_lats), max(poly_lats)
+    
+    for t in chunk:
+        # Triangle bounding box check
+        t_lons = [t[0][0], t[1][0], t[2][0]]
+        t_lats = [t[0][1], t[1][1], t[2][1]]
+        if max(t_lons) < p_min_lon or min(t_lons) > p_max_lon or \
+           max(t_lats) < p_min_lat or min(t_lats) > p_max_lat:
+            continue
+            
+        for v in range(3):
+            if PointInPoly(t[v][0:2], poly):
+                t[v][2] = elevation
+    return chunk
+
+def update_ramp_worker(chunk, poly, ramp_tria):
+    poly_lons = [v[0] for v in poly]
+    poly_lats = [v[1] for v in poly]
+    p_min_lon, p_max_lon = min(poly_lons), max(poly_lons)
+    p_min_lat, p_max_lat = min(poly_lats), max(poly_lats)
+    
+    for t in chunk:
+        t_lons = [t[0][0], t[1][0], t[2][0]]
+        t_lats = [t[0][1], t[1][1], t[2][1]]
+        if max(t_lons) < p_min_lon or min(t_lons) > p_max_lon or \
+           max(t_lats) < p_min_lat or min(t_lats) > p_max_lat:
+            continue
+            
+        for v in range(3):
+            if PointInPoly(t[v][0:2], poly):
+                l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
+                t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (ramp_tria[1][2] - ramp_tria[2][2])
+    return chunk
 
 
 
@@ -110,6 +152,7 @@ class muxpGUI:
         self.conflictStrategy = "" #Strategy how to handle conflict with already existing updates in dsf-file
         self.activatePack = 1 #set to 1/True if after writing of updated dsf file user is queried to directly activate pack in scenery_Packs.ini
         self.global_scenery_pack = "Global Scenery/X-Plane 11 Global Scenery" # Default value
+        self.autoOrtho4XP = 0 # set to 1/True if Ortho4XP should be automatically searched based on tile
 
         self.button_selected = None  # keeps track of selected button in GUI
 
@@ -317,6 +360,14 @@ class muxpGUI:
             log.info("activatePack set to: {}".format(self.activatePack))
         else:
             self.activatePack = 0
+        if "autoOrtho4XP" in c:
+            try:
+                self.autoOrtho4XP = int(float(c['autoOrtho4XP']))
+            except ValueError:
+                log.error("autoOrtho4XP is not of type int; value not updated")
+            log.info("autoOrtho4XP set to: {}".format(self.autoOrtho4XP))
+        else:
+            self.autoOrtho4XP = 0
         return 0 #no error
 
 
@@ -346,7 +397,7 @@ class muxpGUI:
                     self.global_scenery_pack = "Global Scenery/X-Plane 11 Global Scenery"
                 log.info("Set X-Plane folder to: {} and Global Scenery to: {}".format(self.xpfolder, self.global_scenery_pack))
                 log.info("Set MUXP-Folder to: {}".format(self.muxpfolder))
-                self.safeConfig(self.xpfolder, self.muxpfolder, 0, 1, "", "ORIGINAL")
+                self.safeConfig(self.xpfolder, self.muxpfolder, 0, 1, "", "ORIGINAL", 0)
                 return 1
             head, tail = path.split(head)
             if len(tail) == 0:
@@ -524,6 +575,10 @@ class muxpGUI:
         dsfsource_entry.insert(0, self.dsf_sceneryPack)
         dsfsource_select = Button(configwin, text='Select', command=lambda: select_pack(dsfsource_entry))
         dsfsource_select.grid(row=6, column=3, sticky=W, pady=4, padx=10)
+        autoOrthoType = IntVar()
+        autoOrthoType.set(self.autoOrtho4XP)
+        autoOrthoCB = Checkbutton(configwin, text="Auto use Ortho4XP if available ", variable=autoOrthoType)
+        autoOrthoCB.grid(row=7, column=0, sticky=E, pady=4)
         dsfsource_info_label = Label(configwin, anchor=W, justify=LEFT, text="^ Option to use [ACTIVE].    SELECT searches all packs and takes a while!  ^").grid(row=7, column=1, columnspan=2, padx=10)
         conflict_label = Label(configwin, text="Conflict strategy (optional):")
         conflict_label.grid(row=8, column=0, pady=4, sticky=E)
@@ -532,18 +587,19 @@ class muxpGUI:
         conflict_entry.insert(0, self.conflictStrategy)
         conflict_info_label = Label(configwin, anchor=W, justify=LEFT, text="^ Options are: IGNORE, CURRENT, ORIGINAL, BACKUP, CANCEL").grid(row=9, column=1, columnspan=2, padx=10)
         buttom_label = Label(configwin, anchor=W, justify=LEFT, text=" ").grid(row=10, column=1, columnspan=2, padx=10)
-        save_button = Button(configwin, text='  SAVE  ', command=lambda: self.safeConfig(xpfolder_entry.get(), muxpfolder_entry.get(), kmlExportType.get(), activatePackType.get(), dsfsource_entry.get(), conflict_entry.get()))
+        save_button = Button(configwin, text='  SAVE  ', command=lambda: self.safeConfig(xpfolder_entry.get(), muxpfolder_entry.get(), kmlExportType.get(), activatePackType.get(), dsfsource_entry.get(), conflict_entry.get(), autoOrthoType.get()))
         save_button.grid(row=11, column=1, pady=4)
 
         
-    def safeConfig(self, xf, mf, ke, ap, ds, cs):
+    def safeConfig(self, xf, mf, ke, ap, ds, cs, ao):
         self.xpfolder = xf
         self.muxpfolder = mf
         self.kmlExport = ke
         self.activatePack = ap
         self.dsf_sceneryPack = ds
         self.conflictStrategy = cs
-        log.info("Saving config {}, {}, {}, {}, {}, {}".format(xf, mf, ke, ap, ds, cs))
+        self.autoOrtho4XP = ao
+        log.info("Saving config {}, {}, {}, {}, {}, {}, {}".format(xf, mf, ke, ap, ds, cs, ao))
         filename = self.runfile[:self.runfile.rfind('.')]+'.config'
         with open(filename, "w", encoding="utf8", errors="ignore") as f:
             f.write("muxpconfigversion:  1\n")
@@ -553,6 +609,7 @@ class muxpGUI:
             f.write("activatePack:  {}\n".format(self.activatePack))
             f.write("dsfSourcePack: {}\n".format(self.dsf_sceneryPack))
             f.write("conflictStrategy: {}\n".format(self.conflictStrategy))
+            f.write("autoOrtho4XP: {}\n".format(self.autoOrtho4XP))
 
 
     def SelectDSF(self, scenery_packs):
@@ -611,6 +668,15 @@ class muxpGUI:
             filenames[2] = self.xpfolder + "/" + self.global_scenery_pack + "/" + rel_path.replace(sep, '/')
             log.info("Tile in muxpfolder was selected, so original file is default scenery: {}".format(filenames[2]))
         for i, f in enumerate(filenames): ### TBD: Define all file extensions AND directory names globally
+            # In case ORIGINAL is not found as .muxp.original, try to find it in Global Scenery
+            if i == 2 and not path.exists(f):
+                global_dsf = self.xpfolder + "/" + self.global_scenery_pack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] + ".dsf"
+                if path.exists(global_dsf):
+                    f = global_dsf
+                    filenames[i] = f
+                elif path.exists(global_dsf + ".7z"):
+                    f = global_dsf + ".7z"
+                    filenames[i] = f
             log.info("Evaluating conflicts for: {} {}".format(i, f))
             if path.exists(f):
                 err, props[i] = getDSFproperties(f)
@@ -889,10 +955,17 @@ class muxpGUI:
         ############### SEARCH AND READ DSF FILE TO ADAPT ######################
         scenery_packs = None  # dictionary of scenery packs for according tiles, re-used also below for activation
         log.info("source_dsf in muxp-file: {}".format(update["source_dsf"]))
-        #if update["source_dsf"].find("DEFAULT") == 0:  # skip searches when DEFAULT mesh is first preferred in MUXP file
-        #### These lines are not used any more, as DEFAULT is also handled below to warn in case DEFAULT is not active mesh ###
-        #    self.dsf_sceneryPack = self.global_scenery_pack  #### TBD: Define this string globally!!!
-        #    log.info("MUXP file asks to use DEFAULT scenery, so updating: {}".format(self.dsf_sceneryPack))
+
+        # AUTO ORTHO4XP DETECTION (Higher priority if enabled)
+        if self.autoOrtho4XP and (len(self.dsf_sceneryPack) == 0 or self.dsf_sceneryPack == "[ACTIVE]"):
+            ortho_pack = "Custom Scenery/zOrtho4XP_" + update["tile"]
+            if path.exists(self.xpfolder + "/" + ortho_pack):
+                self.dsf_sceneryPack = ortho_pack
+                log.info("Auto-detected Ortho4XP pack: {}".format(ortho_pack))
+            else:
+                if path.exists(self.xpfolder + "/" + ortho_pack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] + ".dsf.7z"):
+                    self.dsf_sceneryPack = ortho_pack
+                    log.info("Auto-detected Ortho4XP pack (7z compressed): {}".format(ortho_pack))
 
         if len(self.dsf_sceneryPack) == 0:  # no scenery pack yet defined (e.g. via config file)
             self.muxp_status_label.config(text="Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
@@ -900,6 +973,7 @@ class muxpGUI:
             self.window.update()
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
             log.info("SCENERY PACKS INSTALLED: {}".format(scenery_packs))
+            
             preferred_pack = find_preferred_pack(update["source_dsf"], scenery_packs, self.muxpfolder)
             if not preferred_pack:
                 if len(update["source_dsf"]) == 0:
@@ -917,26 +991,8 @@ class muxpGUI:
                 self.SelectDSF(scenery_packs)  # will set selected pack to self.dsf_sceneryPack
             else:
                 log.info("Following preferred scenery pack of muxp-file found to be updated: {}".format(preferred_pack))
-                if scenery_packs[preferred_pack] != "ACTIVE" and "ACTIVE" in scenery_packs.values():
-                    ## TBD better then change preferred PACK above    and not (self.muxpfolder.find(ACTIVE_pack) >= 0 and preferred_pack != self.global_scenery_pack): #### NOT CORRECT YET !!!!!  ACTIVE_pack does not exist ###############
-                    # if there is no other ACTIVE pack (e.g. when only DEFAULT is installed, this is also okay)
-                    if self.activatePack:
-                        warn_return = self.warn_window("You are going to update following scenery pack:\n{}\n".format(preferred_pack) +
-                                                       "This mesh is not the active one in scenery_packs.ini.\n" +
-                                                       "As you enabled activation of updated scenery, the\n" +
-                                                       "current active mesh will not be visible at your next\n" +
-                                                       "start of X-Plane when you proceed.\n",
-                                                       "Updating Non Active Mesh", "Proceed", "Stop")
-                    else:
-                        warn_return = self.warn_window("You are going to update following scenery pack:\n{}\n".format(preferred_pack) +
-                                                       "This mesh is not the active one in scenery_packs.ini.\n" +
-                                                       "As you did not enable activation of updated scenery, the\n" +
-                                                       "update will not be visible at your next start of X-Plane.\n",
-                                                       "Updating Non Active Mesh", "Proceed", "Stop")
-                    if warn_return == "Stop":
-                        showRunResult("Stopped", "Updated mesh is not the active one.", False)
-                        return -22
                 self.dsf_sceneryPack = preferred_pack
+
         elif self.dsf_sceneryPack == "[ACTIVE]":
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
             for sp in scenery_packs.keys():
@@ -952,6 +1008,11 @@ class muxpGUI:
                 self.dsf_sceneryPack = self.muxpfolder[self.muxpfolder.find("Custom Scenery"):]  # choose muxpfolder as scenery_pack to update
                 log.info("As muxp-folder {} includes tile {} this will be updated instead of plain default tile.".format(self.dsf_sceneryPack, update["tile"]))
         dsf_output_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf" #this is default dsf filename name for scenery pack
+        
+        # Check if the source file actually exists as .dsf or .dsf.7z
+        if not path.exists(dsf_output_filename):
+            if path.exists(dsf_output_filename + ".7z"):
+                dsf_output_filename = dsf_output_filename + ".7z"
             ### WARNING: In case of default mesh, the dsf_output_filname needs to be changed to the one in muxpfolder (done below)
         #if self.dsf_sceneryPack == self.global_scenery_pack:
         #    log.info("Default mesh was selected to be updated. No need to check for conflicts.")
@@ -1033,8 +1094,20 @@ class muxpGUI:
                 mkdir(writefolder)
                 log.info("Created new 10grid folder in muxpfolder: {}".format(writefolder))
             #dsf_output_filename = writefolder + "/" + update["tile"] +".dsf" ## already set above
+        # Ensure the directory for dsf_output_filename exists
+        output_dir = path.dirname(dsf_output_filename)
+        if not path.exists(output_dir):
+            makedirs(output_dir)
+            log.info("Created output directory: {}".format(output_dir))
+
         log.info("Writing updated dsf file to: {}".format(dsf_output_filename))
         self.dsf.write(dsf_output_filename)
+        
+        # If we wrote a .dsf but a .dsf.7z exists, remove the .7z to avoid X-Plane confusion
+        if dsf_output_filename.endswith(".dsf"):
+            if path.exists(dsf_output_filename + ".7z"):
+                log.info("Removing old compressed file: {}".format(dsf_output_filename + ".7z"))
+                remove(dsf_output_filename + ".7z")
 
         ################### SAVE USED MUXP FILE IN INSTALLED-MUXPS-FOLDER ##########
         installed_muxp_files_dir = self.muxpfolder + "/Installed MUXP Files"  ######## TBD: DEFINE DIR GLOBALLY #####
@@ -1145,11 +1218,22 @@ class muxpGUI:
             if c["command"] == "update_elevation_in_poly":
                 if c["elevation"] is not None:
                     log.info("Updating elevation to: {} in polygon: {}".format(c["elevation"], c["coordinates"]))
-                    for t in a.atrias: #go through all trias in area
-                        for i, p in enumerate(t[0:3]): #all their points
-                            if PointInPoly(p[0:2], c["coordinates"]):
-                                log.info("For tria memory id {}: with coords: {} set elevation from: {}  to: {}".format(hex(id(t[i])), t[i][0:2], t[i][2],  c["elevation"]))
-                                t[i][2] = c["elevation"]
+                    if len(a.atrias) > 1000:
+                        num_procs = cpu_count()
+                        log.info("Using {} CPU cores for parallel processing ({} triangles)...".format(num_procs, len(a.atrias)))
+                        self.muxp_status_label.config(text = "Processing (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"]))
+                        self.window.update()
+                        chunk_size = len(a.atrias) // num_procs + 1
+                        chunks = [a.atrias[i:i + chunk_size] for i in range(0, len(a.atrias), chunk_size)]
+                        with Pool(num_procs) as pool:
+                            worker = partial(update_elevation_worker, poly=c["coordinates"], elevation=c["elevation"])
+                            results = pool.map(worker, chunks)
+                        a.atrias = [t for res in results for t in res]
+                    else:
+                        for t in a.atrias: #go through all trias in area
+                            for v in range(3): #all their points
+                                if PointInPoly(t[v][0:2], c["coordinates"]):
+                                    t[v][2] = c["elevation"]
                 elif "3d_coordinates" in c:
                     a.get_mesh_elevation_for_magic_number(c["3d_coordinates"])
                     ramp_tria = c["3d_coordinates"]  # 3 first 3d-coordinates build the tria for ramp inclination
@@ -1157,15 +1241,24 @@ class muxpGUI:
                     ramp_tria[1][0], ramp_tria[1][1] = ramp_tria[1][1], ramp_tria[1][0]  # NOT SWAPPED
                     ramp_tria[2][0], ramp_tria[2][1] = ramp_tria[2][1], ramp_tria[2][0]  # TBD
                     log.info("Following Tria is used for setting elevation: {}".format(ramp_tria))
-                    for nt, t in enumerate(a.atrias):
-                        for v in range(3):
-                            if PointInPoly(t[v][0:2], c["coordinates"]):  # adapt all vertices inside polygon
-                                l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
-                                t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (
-                                            ramp_tria[1][2] - ramp_tria[2][2])
-                                log.info(
-                                    "Vertex no. {} of tria no. {} at {} set to elevation {} with l0={} and l1={}".format(
-                                        v, nt, t[v][:2], t[v][2], l0, l1))
+                    if len(a.atrias) > 1000:
+                        num_procs = cpu_count()
+                        log.info("Using {} CPU cores for parallel ramp processing ({} triangles)...".format(num_procs, len(a.atrias)))
+                        self.muxp_status_label.config(text = "Processing Ramp (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"]))
+                        self.window.update()
+                        chunk_size = len(a.atrias) // num_procs + 1
+                        chunks = [a.atrias[i:i + chunk_size] for i in range(0, len(a.atrias), chunk_size)]
+                        with Pool(num_procs) as pool:
+                            worker = partial(update_ramp_worker, poly=c["coordinates"], ramp_tria=ramp_tria)
+                            results = pool.map(worker, chunks)
+                        a.atrias = [t for res in results for t in res]
+                    else:
+                        for nt, t in enumerate(a.atrias):
+                            for v in range(3):
+                                if PointInPoly(t[v][0:2], c["coordinates"]):  # adapt all vertices inside polygon
+                                    l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
+                                    t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (
+                                                ramp_tria[1][2] - ramp_tria[2][2])
                 else:
                     log.warning("Command {} does neither have value to set elevation nor 3d_coordinates for elevation by triangle. So nothing changed".format(c["command"]))
                 if self.kmlExport:
@@ -1530,21 +1623,23 @@ class muxpGUI:
 
 
 
-########### MAIN #############
-log = defineLog('muxp', 'INFO', 'INFO')  # no log on console for EXE version --> set first INFO to None
-log.info("Started muxp Version: {}".format(muxp_VERSION))
+if __name__ == "__main__":
+    ########### MAIN #############
+    log = defineLog('muxp', 'INFO', 'INFO')  # no log on console for EXE version --> set first INFO to None
+    log.info("Started muxp Version: {}".format(muxp_VERSION))
 
-muxpfiles = []
-for i in range(len(argv)):
-    f = argv[i].replace(sep, '/')   # setting for all OS the correct separators in filename
-    if path.isfile(f):
-        muxpfiles.append(f)
-    if path.isdir(f):  # in case of directories include all files in it (not going down to sub-directories)
-        for (_, _, filenames) in walk(f):
-            filenames = [f + '/' + fn for fn in filenames]  # write directory befor filename to get full path
-            muxpfiles.extend(filenames)
-            break
+    muxpfiles = []
+    for i in range(len(argv)):
+        f = argv[i].replace(sep, '/')   # setting for all OS the correct separators in filename
+        if path.isfile(f):
+            muxpfiles.append(f)
+        if path.isdir(f):  # in case of directories include all files in it (not going down to sub-directories)
+            for (_, _, filenames) in walk(f):
+                filenames = [f + '/' + fn for fn in filenames]  # write directory befor filename to get full path
+                muxpfiles.extend(filenames)
+                break
 
-log.info("MUXP runfile: {} \n   processing following files: {}".format(muxpfiles[0], muxpfiles[1:]))
-main = muxpGUI(muxpfiles[0], muxpfiles[1:])  # first element in muxpfiles is argv[0], the runfile
+    log.info("MUXP runfile: {} \n   processing following files: {}".format(muxpfiles[0], muxpfiles[1:]))
+    main = muxpGUI(muxpfiles[0], muxpfiles[1:])  # first element in muxpfiles is argv[0], the runfile
+    mainloop() # Required for some environments
 
