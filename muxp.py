@@ -279,6 +279,15 @@ class muxpGUI:
         else:
             kmlExport = 0 #default value
         ### Now check if path to X-Plane and Muxp file are existing
+        # Ensure correct Global Scenery pack name for XP12/XP11 detection even if path is set manually
+        if path.exists(path.join(self.xpfolder, 'X-Plane 12.app')) or \
+           path.exists(path.join(self.xpfolder, 'Global Scenery', 'X-Plane 12 Global Scenery')) or \
+           'X-Plane 12' in self.xpfolder:
+            self.global_scenery_pack = "Global Scenery/X-Plane 12 Global Scenery"
+        else:
+            self.global_scenery_pack = "Global Scenery/X-Plane 11 Global Scenery"
+        log.info("X-Plane Global Scenery pack set to: {}".format(self.global_scenery_pack))
+
         if not path.exists(self.xpfolder+"/Custom Scenery"):
             log.error("The following seems not to be the right path to X-Plane folder (Custom Scenery not found): {}".format(self.xpfolder))
             return -5
