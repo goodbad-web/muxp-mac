@@ -996,7 +996,7 @@ class XPLNEDSF:
                     f.seek(0)
                     with py7zr.SevenZipFile(f, mode='r') as archive:
                         filename = archive.getnames()[0]
-                        filedata = archive.read([filename])[filename].read()
+                        filedata = archive.readall()[filename].read()
                     self._log_.info("File is 7Zip archive. Extracted and read file {} from archive with decompressed length {}.".format(filename, len(filedata)))
                     # f.close()  # No need to close here if we use BytesIO later or if it's handled by context
                     f = BytesIO(filedata)
@@ -1096,7 +1096,7 @@ def isDSFoverlay(file):
                 f.seek(0)
                 with py7zr.SevenZipFile(f, mode='r') as archive:
                     filename = archive.getnames()[0]
-                    filedata = archive.read([filename])[filename].read()
+                    filedata = archive.readall()[filename].read()
                 f = BytesIO(filedata)
                 flength = len(filedata) #also update to decompressed length
                 start = f.read(12)
@@ -1133,7 +1133,7 @@ def getDSFproperties(file):
                 f.seek(0)
                 with py7zr.SevenZipFile(f, mode='r') as archive:
                     filename = archive.getnames()[0]
-                    filedata = archive.read([filename])[filename].read()
+                    filedata = archive.readall()[filename].read()
                 f = BytesIO(filedata)
                 flength = len(filedata)  # also update to decompressed length
                 start = f.read(12)
