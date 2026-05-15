@@ -476,7 +476,7 @@ class XPLNEDSF:
         for p in range(len(V)): #for all Pools
             if V[p] == []: ###There can exist empty pools that have to be skipped for scaling!!!
                 self._log_.info("Empty pool number {} not scaled!".format(p))
-                break
+                continue
             if len(V[p][0]) != len(Scalings[p]): #take first vertex as example to determine number of coordinate planes in current pool
                 self._log_.error("Amount of scale values for pool {} does not equal the number of coordinate planes!!!".format(p))
                 return 2
@@ -484,7 +484,7 @@ class XPLNEDSF:
                 if self._DEBUG_: self._log_.debug("Will now scale pool {} plane {} with multiplier: {} and offset: {}".format(p, n ,Scalings[p][n][0], Scalings[p][n][1]))                              
                 if float(Scalings[p][n][0]) == 0.0:
                     if self._DEBUG_: self._log_.debug("   Plane will not be scaled because scale is 0!")
-                    break
+                    continue
                 for v in range(len(V[p])): #for all vertices in current plane
                     if reverse: #de-scale vertices
                         V[p][v][n] = round((V[p][v][n] - Scalings[p][n][1]) * max_int / Scalings[p][n][0])   #de-scale vertex v in pool p for plane n by subtracting offset and dividing by multiplyer
