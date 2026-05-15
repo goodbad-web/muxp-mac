@@ -39,11 +39,11 @@ from io import BytesIO #required to go through bytes of a read 7ZIP-File
 from math import sin, cos, sqrt, atan2, radians # for distance calculation etc.
 
 try:
-    import py7zlib
+    import py7zr
 except ImportError:
-    PY7ZLIBINSTALLED = False
+    PY7ZINSTALLED = False
 else:
-    PY7ZLIBINSTALLED = True
+    PY7ZINSTALLED = True
 
 
 
@@ -992,18 +992,19 @@ class XPLNEDSF:
             self._log_.info("Opened file {} with {} bytes.".format(file, flength))
             start = f.read(12)
             if start.startswith(b'7z\xBC\xAF\x27\x1C'):
-                if PY7ZLIBINSTALLED:
+                if PY7ZINSTALLED:
                     f.seek(0)
-                    archive = py7zlib.Archive7z(f)
-                    filedata = archive.getmember(archive.getnames()[0]).read()
-                    self._log_.info("File is 7Zip archive. Extracted and read file {} from archive with decompressed length {}.".format(archive.getnames()[0], len(filedata)))
-                    f.close()
+                    with py7zr.SevenZipFile(f, mode='r') as archive:
+                        filename = archive.getnames()[0]
+                        filedata = archive.read([filename])[filename].read()
+                    self._log_.info("File is 7Zip archive. Extracted and read file {} from archive with decompressed length {}.".format(filename, len(filedata)))
+                    # f.close()  # No need to close here if we use BytesIO later or if it's handled by context
                     f = BytesIO(filedata)
                     self._progress_ = [0, 0, len(filedata)] #set progress maximum to decompressed length
                     flength = len(filedata) #also update to decompressed length
                     start = f.read(12)
                 else:
-                    self._log_.error("File is 7Zip encoded! py7zlib not installed to decode.")
+                    self._log_.error("File is 7Zip encoded! py7zr not installed to decode.")
                     return 2
             identifier, version = unpack('<8sI',start)
             if identifier.decode("utf-8") != "XPLNEDSF" or version != 1:
@@ -1091,16 +1092,16 @@ def isDSFoverlay(file):
     with open(file, "rb") as f:    ##Open Tile as binary fily for reading
         start = f.read(12)
         if start.startswith(b'7z\xBC\xAF\x27\x1C'):
-            if PY7ZLIBINSTALLED:
+            if PY7ZINSTALLED:
                 f.seek(0)
-                archive = py7zlib.Archive7z(f)
-                filedata = archive.getmember(archive.getnames()[0]).read()
-                f.close()
+                with py7zr.SevenZipFile(f, mode='r') as archive:
+                    filename = archive.getnames()[0]
+                    filedata = archive.read([filename])[filename].read()
                 f = BytesIO(filedata)
                 flength = len(filedata) #also update to decompressed length
                 start = f.read(12)
             else:
-                return "ERROR in isDSFoverlay: File {} is 7Zip encoded! py7zlib not installed to decode.".format(file)
+                return "ERROR in isDSFoverlay: File {} is 7Zip encoded! py7zr not installed to decode.".format(file)
         identifier, version = unpack('<8sI',start)
         if identifier.decode("utf-8") != "XPLNEDSF" or version != 1:
             return "ERROR in isDSFoverlay: File {} is no X-Plane dsf-file Version 1!".format(file)  
@@ -1128,16 +1129,16 @@ def getDSFproperties(file):
     with open(file, "rb") as f:  # Open Tile as binary file for reading
         start = f.read(12)
         if start.startswith(b'7z\xBC\xAF\x27\x1C'):
-            if PY7ZLIBINSTALLED:
+            if PY7ZINSTALLED:
                 f.seek(0)
-                archive = py7zlib.Archive7z(f)
-                filedata = archive.getmember(archive.getnames()[0]).read()
-                f.close()
+                with py7zr.SevenZipFile(f, mode='r') as archive:
+                    filename = archive.getnames()[0]
+                    filedata = archive.read([filename])[filename].read()
                 f = BytesIO(filedata)
                 flength = len(filedata)  # also update to decompressed length
                 start = f.read(12)
             else:
-                return -2, "ERROR in getDSFproperties: File {} is 7Zip encoded! py7zlib not installed to decode.".format(file)
+                return -2, "ERROR in getDSFproperties: File {} is 7Zip encoded! py7zr not installed to decode.".format(file)
         identifier, version = unpack('<8sI',start)
         if identifier.decode("utf-8") != "XPLNEDSF" or version != 1:
             return -3, "ERROR in getDSFproperties: File {} is no X-Plane dsf-file Version 1!".format(file)

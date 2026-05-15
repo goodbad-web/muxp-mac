@@ -248,13 +248,16 @@ class muxpGUI:
         if self.xpfolder.find("[INSIDE]") == 0:  # Allow to get X-Plane folder based on current folder where run/config file is in
             head, tail = path.split(path.abspath(path.dirname(self.runfile)))
             while len(tail) > 0:
-                if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')):
+                if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')) or \
+                   path.exists(path.join(head, 'X-Plane.app')) or \
+                   path.exists(path.join(head, 'X-Plane 11.app')) or \
+                   path.exists(path.join(head, 'X-Plane 12.app')):
                     self.xpfolder = head.replace(sep, '/')  # setting for all OS the correct separators in filename
                     log.info("Set X-Plane folder to: {}".format(self.xpfolder))
                     break
                 head, tail = path.split(head)
             if len(tail) == 0:
-                log.error("Not inside X-Plane folder as stated in config file. X-Plane Folder not set! Current folder is: {}".format(path.abspath(path.dirname(runfile))))
+                log.error("Not inside X-Plane folder as stated in config file. X-Plane Folder not set! Current folder is: {}".format(path.abspath(path.dirname(self.runfile))))
                 self.xpfolder = ""
                 return -3
         self.muxpfolder = c["muxpfolder"].strip()
@@ -316,7 +319,10 @@ class muxpGUI:
 
         head, tail = path.split(path.abspath(path.dirname(self.runfile)))
         while len(tail) > 0:
-            if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')):
+            if tail == "Custom Scenery" or path.exists(path.join(head, 'X-Plane.exe')) or \
+               path.exists(path.join(head, 'X-Plane.app')) or \
+               path.exists(path.join(head, 'X-Plane 11.app')) or \
+               path.exists(path.join(head, 'X-Plane 12.app')):
                 self.xpfolder = head.replace(sep, '/')  # setting for all OS the correct separators in filename
                 self.muxpfolder = path.abspath(path.dirname(self.runfile))
                 self.muxpfolder = self.muxpfolder.replace(sep, '/')  # setting for all OS the correct folder separators
@@ -1101,7 +1107,7 @@ class muxpGUI:
         if self.kmlExport:
             ######## TBD: incl. road segments in kml and allow to show different polygons, points with different color settings ##########
             ######## TBD: incl. parameter which aspects like raster, roads etc. should be shown ##################
-            kml_filename = self.runfile[:self.runfile.rfind('\\')+1] + update["tile"] + "_dsf"
+            kml_filename = path.join(path.dirname(self.runfile), update["tile"] + "_dsf")
             log.info("Writing kml file before change to: {}".format(kml_filename + "_0.kml"))
             kmlExport2(self.dsf, [areabound], a.atrias, kml_filename + "_0")
 
