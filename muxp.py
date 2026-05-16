@@ -680,24 +680,54 @@ class muxpGUI:
                 selected_secenery = selected_secenery[selected_secenery.find(":")+2:]
                 self.dsf_sceneryPack = selected_secenery
 
-        self.dsf_sceneryPack = ""   # set to empty, as this is variable needs value for window to be closed
+        self.dsf_sceneryPack = None   # set to None, as this is variable needs value for window to be closed
         selectDSFwin = Toplevel(self.window)
         selectDSFwin.attributes("-topmost", True)
+        
+        def on_close():
+            self.dsf_sceneryPack = "CANCEL"
+            
+        selectDSFwin.protocol("WM_DELETE_WINDOW", on_close)
+        
         topinfo = Label(selectDSFwin, text="Select DSF File to update:")
         topinfo.grid(row=0, column=0)
         listbox = Listbox(selectDSFwin, width=80)
         listbox.grid(row=1, column=0, columnspan=3)
-        for item in scenery_packs.keys():
-            listbox.insert(END, scenery_packs[item] + ": " + item )
+        
+        if not scenery_packs:
+            listbox.insert(END, "No scenery packs found for this tile!")
+            ok_state = DISABLED
+        else:
+            for item in scenery_packs.keys():
+                listbox.insert(END, scenery_packs[item] + ": " + item )
+            ok_state = NORMAL
+            
         buttoninfo = Label(selectDSFwin, text="Important: When not selecting new or active dsf make sure that you re-arrange\n"
                                               "           scenery_packs.ini in order that update becomes visible in X-Plane!\n"
                                               "Press OK after selection.")
         buttoninfo.grid(row=2, column=0)
-        okbutton = Button(selectDSFwin, text='  OK  ', command = lambda: done(listbox, buttoninfo)) 
+        
+        def on_ok():
+            done(listbox, buttoninfo)
+            if self.dsf_sceneryPack != "": # if done() set dsf_sceneryPack
+                selectDSFwin.destroy()
+
+        okbutton = Button(selectDSFwin, text='  OK  ', state=ok_state, command = on_ok) 
         okbutton.grid(row=3, column=1)
-        while self.dsf_sceneryPack == "": #wait until selection is done
-            selectDSFwin.update()
-        selectDSFwin.destroy()
+        
+        cancelbutton = Button(selectDSFwin, text=' Cancel ', command = on_close)
+        cancelbutton.grid(row=3, column=2)
+
+        while self.dsf_sceneryPack is None: #wait until selection is done
+            try:
+                selectDSFwin.update()
+            except TclError: # window was destroyed
+                if self.dsf_sceneryPack is None:
+                    self.dsf_sceneryPack = "CANCEL"
+                break
+        
+        if selectDSFwin.winfo_exists():
+            selectDSFwin.destroy()
 
 
     def handleMUXPconflicts(self, filename, update):
@@ -969,6 +999,14 @@ class muxpGUI:
     def _runMuxp_worker(self, filename):
         def showRunResult(status, info, err=False):
             self.msg_queue.put(('result', (status, info, err)))
+
+        try:
+            self._runMuxp_worker_internal(filename, showRunResult)
+        except Exception as e:
+            log.exception("Unexpected error in worker thread")
+            showRunResult("Fatal Error", "Unexpected error: {}\nCheck muxp.log for details.".format(str(e)), True)
+
+    def _runMuxp_worker_internal(self, filename, showRunResult):
 
 
         ##### IN CASE CONVERSION FROM KML/WED TO MUXP NEEDED ########

@@ -887,7 +887,6 @@ class XPLNEDSF:
     def _packAtoms_(self): #starts all functions to write all variables to strings (for later been written to file)
         ###### TBD: only pack atoms if changed --> saves time !! ############
         self._log_.info("Preparing data to be written to file.")
-        self._log_.info("This version does not yet support nested polygons (Command ID 14)!")
         self._encodeProps_()
         self._encodeDefs_() 
         self._scaleV_(16, True) #de-scale again      
@@ -935,7 +934,10 @@ class XPLNEDSF:
             if p[1] == 13: #POLYGON RANGE
                 for i in range(p[3], p[4]):
                     l[-1].append([p[0], i])
-        ####### TO INCLUDE ALSO OTHER POLYGON COMMAND IDs between 12 and 15 !!!!!!!!!!!!!!!!!!!!!!!!!!
+            elif p[1] == 14: #NESTED POLYGON
+                for w in range(p[3]):
+                    winding = p[4+w]
+                    l[-1].append( [ [p[0], idx] for idx in winding ] )
         return l
 
     def BoundingRectangle(self, vertices): #returns 4-tuple of (latS, latN, lonW, lonE) building the smallest rectangle to include all vertices in list as pairs of [lon, lat]
