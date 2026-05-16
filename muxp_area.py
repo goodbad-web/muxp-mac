@@ -1413,9 +1413,9 @@ class muxpArea:
         """
         xp, yp = [], []  # points for spline to be created
         for p in spline_points:
-            xp.append(distance([spline_points[0][1], spline_points[0][0]], [p[1], p[0]]))  #### IMPORTANT: 3d coordinates currently not swapped !!!!!!!! ##################
+            xp.append(distance(spline_points[0][:2], p[:2]))  #### Swapping handled globally ####
             if p[2] == -99999:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
-                yp.append(self.mesh_elevation([p[1], p[0]]))  #### IMPORTANT: 3d coordinates currently not swapped !!!
+                yp.append(self.mesh_elevation(p[:2]))  #### Swapping handled globally ####
                 self.log.info("Assigned magic elevation -99999 at {} to mesh-elevation: {}".format(p[:2], yp[-1]))
             else:
                 yp.append(p[2])
@@ -1598,7 +1598,7 @@ class muxpArea:
         #  when MAGIC NUMBER is used for elevation then elevation is assigned from dsf file instead assigning it
         for i in range(len(coords)):  # MAGIC elevation needs to be replaced before placeholder elevation is assigned
             if coords[i][2] == magic_number:  # MAGIC NUMBER for retrieving elevation from dsf file instead assigning it
-                coords[i][2] = self.mesh_elevation([coords[i][1], coords[i][0]])  #### IMPORTANT: 3d coordinates currently not swapped !!!
+                coords[i][2] = self.mesh_elevation(coords[i][:2])  #### Swapping handled globally ####
                 self.log.info("Assigned magic elevation -99999 at {} to: {}".format(coords[i][:2], coords[i][2]))
 
     def integrate_elevation_mesh(self, obj_trias, obj_outline):

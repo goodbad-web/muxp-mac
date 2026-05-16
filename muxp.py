@@ -1075,6 +1075,9 @@ class muxpGUI:
                         showRunResult("Stopped", "Requested Scenery Pack missing", False)
                         return -21
                 self.request_ui("SelectDSF", scenery_packs)  # will set selected pack to self.dsf_sceneryPack
+                if self.dsf_sceneryPack == "CANCEL":
+                    showRunResult("Cancelled", "Mesh update cancelled by user", False)
+                    return 0
             else:
                 log.info("Following preferred scenery pack of muxp-file found to be updated: {}".format(preferred_pack))
                 self.dsf_sceneryPack = preferred_pack
@@ -1277,7 +1280,7 @@ class muxpGUI:
         else:
             log.warning("Using elevation scale defined in MUXP file: {}. Might be that this will not match elevation scale {} in dsf file at all coordinates and causes visible edges".format(elevation_scale, a.elev_factor_min/65535))
         if elevation_scale not in [1, 1/3, 1/5, 1/15, 1/17, 1/51, 1/85, 1/255, 1/257]:
-            log.warning("You are using elevation scale which will not allow exact match of full meters in XP. This could end up in viisble edges. Best is to use one of theses scales".format([1/3, 1/5, 1/15, 1/17, 1/51, 1/85, 1/255, 1/257]))
+            log.warning("You are using elevation scale which will not allow exact match of full meters in XP. This could end up in viisble edges. Best is to use one of theses scales: {}".format([1/3, 1/5, 1/15, 1/17, 1/51, 1/85, 1/255, 1/257]))
 
 
         areabound = [(update["area"][2],update["area"][0]), (update["area"][2],update["area"][1]), (update["area"][3],update["area"][1]),
@@ -1321,9 +1324,6 @@ class muxpGUI:
                 elif "3d_coordinates" in c:
                     a.get_mesh_elevation_for_magic_number(c["3d_coordinates"])
                     ramp_tria = c["3d_coordinates"]  # 3 first 3d-coordinates build the tria for ramp inclination
-                    ramp_tria[0][0], ramp_tria[0][1] = ramp_tria[0][1], ramp_tria[0][0]  # 3d coords currently
-                    ramp_tria[1][0], ramp_tria[1][1] = ramp_tria[1][1], ramp_tria[1][0]  # NOT SWAPPED
-                    ramp_tria[2][0], ramp_tria[2][1] = ramp_tria[2][1], ramp_tria[2][0]  # TBD
                     log.info("Following Tria is used for setting elevation: {}".format(ramp_tria))
                     if len(a.atrias) > 1000:
                         num_procs = cpu_count()

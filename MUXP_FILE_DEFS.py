@@ -77,5 +77,6 @@ LIST_TYPES = {"coordinates": ["float", "float"],  # currently just float and int
               "road_coords_drapped": ["float", "float", "int"]}
 
 COORD_SWAPPING = ["coordinates",
-                  "road_coords_drapped"]  # If parameter/list is included here coordinates from lon/lat will be swapped to x,y
+                  "road_coords_drapped",
+                  "3d_coordinates"]  # If parameter/list is included here coordinates from lat/lon will be swapped to lon/lat
 ########## IMPORTANT: 3d_coordinates currently not swpapped !!!!!!!!!!! ############################################

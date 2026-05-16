@@ -386,8 +386,8 @@ def evalspline(x, spline): #evaluates spline at position x
     return spline[1][4*i+0] * x**3 + spline[1][4*i+1] * x**2 + spline[1][4*i+2] * x + spline[1][4*i+3]
 
 def interpolatedSegmentElevation(rwy, p, rwySpline): #based on segment's spline profile, the elevation of a point orthogonal to segment is calculated  (segement used to be runway)   
-    start = (rwy[0][1], rwy[0][0]) #start coordinates rwy 
-    end = (rwy[1][1], rwy[1][0]) #end coordinates rwy
+    start = rwy[0][:2] #start coordinates rwy (already lon, lat)
+    end = rwy[1][:2] #end coordinates rwy (already lon, lat)
     startD = (start[0] - 0.1 * (end[0] - start[0]), start[1] - 0.1 * (end[1] - start[1])) #use starting point 10% of rwy length before to really get value for all points around runway
     endD = (start[0] + 1.1 * (end[0] - start[0]), start[1] + 1.1 * (end[1] - start[1]))   #use end point 10% of rwy length behind to really get value for all points around runway
     inclination_of_ortho = (lat2y(end[1]) - lat2y(start[1]), lon2x(start[0]) - lon2x(end[0]))  # NEW 04.08.2020 done in Mercartor Projection to keep equal of angle
