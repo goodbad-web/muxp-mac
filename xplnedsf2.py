@@ -645,19 +645,18 @@ class XPLNEDSF:
                        self.CMDS[-1].extend(y)
                        i += l
             else:
-                if id == 14: #special double packed case, which is explicetly treated separate and has special format returning lists inside commands !!!
-                             ###### not tested yet !!!!!!!! ########
+                if id == 14: #special double packed case (Nested Polygons)
                     parameter, windings = unpack('<HB', self._Atoms_['SDMC'][i : i + 3])
                     i += 3
-                    self.CMDS[-1].extend(parameter)
+                    self.CMDS[-1].extend([parameter, windings])
                     for w in range(windings):
                         indices, = unpack('<B', self._Atoms_['SDMC'][i : i + 1])
                         i += 1
                         windinglist = []
                         for m in range(indices):
-                            y, = unpack('<H', self._Atoms_['SDMC'][i : i + 2])
+                            idx, = unpack('<H', self._Atoms_['SDMC'][i : i + 2])
                             i += 2
-                            windinglist.extend(y)
+                            windinglist.append(idx)
                         self.CMDS[-1].append(windinglist)
                 else: #command id not tretated here until now
                     self._log_.warning("Unknown command ID {} ignored!".format(id))
@@ -781,9 +780,16 @@ class XPLNEDSF:
                                 ecmd += pack('<' + valtype, c[i])
                             i += 1
             else:
-                ######### TBD: include special code for CMD 14 here!!! ########## TBD ########### TBD ########### TBD ########### TBD ############### TBD ###########
-                self._log_.error("CMD id {} is not supported (CMD 14 not implemented yet)! Will be skipped!!".format(id))
-                return b''
+                if id == 14: # Nested Polygon Aligned
+                    ecmd += pack('<HB', c[1], c[2]) # defIndex and windings
+                    for w in range(c[2]):
+                        winding = c[3+w]
+                        ecmd += pack('<B', len(winding))
+                        for idx in winding:
+                            ecmd += pack('<H', idx)
+                else:
+                    self._log_.error("CMD id {} is not supported! Will be skipped!!".format(id))
+                    return b''
             return ecmd
         ### end of inner function to pack single CMDS ###   
         for d in self.DefObjects: #for each object definition write according CMDS

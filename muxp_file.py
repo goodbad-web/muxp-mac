@@ -342,7 +342,7 @@ def findDSFmeshFiles(tile, xpfolder, logname):
                 for f in files:
                     if f[len(f)-4:] != ".dsf": #only consider .dsf-files
                         continue
-                    if stat(path.join(root, f)).st_size > 1000000: ### WARNING: DSF Mesh with size less than 1MB will not be considered to be a mesh pack!
+                    if stat(path.join(root, f)).st_size > 10000: ### Lowered threshold to 10KB to include small meshes
                         err, props = getDSFproperties(path.join(root, f))
                         if err:
                             log.error(props)
@@ -642,7 +642,7 @@ def unflatten_apt(filename, icao_id, logname):
     try:
         with open(filename, "r", encoding="utf8", errors="ignore") as f:
             lines = f.readlines()
-    except TypeError: #### WRONG ERROR ####
+    except (OSError, IOError):
         log.error("apt-file {} not readable!".format(filename))
         return -1, "apt-file not readable"
 

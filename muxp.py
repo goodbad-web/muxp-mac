@@ -38,6 +38,8 @@ from sys import argv, exit
 from glob import glob
 from multiprocessing import Pool, cpu_count
 from functools import partial
+import threading
+import queue
 
 # Worker functions for multiprocessing
 def update_elevation_worker(chunk, poly, elevation):
@@ -181,6 +183,9 @@ class muxpGUI:
         self.muxp_undo = Button(self.window, text='  Undo muxp   ', state=DISABLED, command=lambda: self.undo_muxp())
         self.muxp_undo.grid(row=9, column=2, sticky=E, pady=4)        
         log.info("GUI is set up.")
+        
+        self.msg_queue = queue.Queue()
+        self.window.after(100, self.process_queue)
         
 
 
@@ -405,12 +410,60 @@ class muxpGUI:
                 return -1
 
         
-    def showProgress(self, percentage):
+    def showProgress(self, percentage, from_queue=False):
+        if not from_queue and threading.current_thread() != threading.main_thread():
+            self.msg_queue.put(('progress', percentage))
+            return
+
         if self.current_action == 'read':
             self.muxp_status_label.config(text="read dsf-file ({} percent)".format(percentage))
         elif self.current_action == 'write':
             self.muxp_status_label.config(text="write updated dsf-file ({} percent)".format(percentage))
         self.window.update()
+
+    def request_ui(self, func_name, *args, **kwargs):
+        # Helper to call UI methods from worker thread and wait for result
+        resp_queue = queue.Queue()
+        self.msg_queue.put(('ui_request', (func_name, args, kwargs, resp_queue)))
+        return resp_queue.get()
+
+    def display_note(self, note):
+        displayNote(self.window, note)
+
+    def process_queue(self):
+        try:
+            while True:
+                msg_type, data = self.msg_queue.get_nowait()
+                if msg_type == 'status':
+                    self.muxp_status_label.config(text=data)
+                elif msg_type == 'progress':
+                    self.showProgress(data, from_queue=True)
+                elif msg_type == 'info':
+                    self.info_label.config(text=data)
+                elif msg_type == 'result':
+                    self.on_process_finished(data)
+                elif msg_type == 'ui_request':
+                    func_name, args, kwargs, resp_queue = data
+                    func = getattr(self, func_name)
+                    result = func(*args, **kwargs)
+                    resp_queue.put(result)
+                self.window.update()
+        except queue.Empty:
+            pass
+        self.window.after(100, self.process_queue)
+
+    def on_process_finished(self, result):
+        status, info, err = result
+        self.muxp_status_label.config(text=status)
+        self.info_label.config(text=info)
+        self.muxpfile_select.config(state="normal")
+        self.config_button.config(state="normal")
+        self.muxp_start.config(state="normal")
+        if err:
+            log.error(status + " // " + info)
+        else:
+            log.info(status + " // " + info)
+        self.getConfig()
 
     def select_muxpfile(self, entry, filename=None):
         # if file is set it is directly displayed
@@ -905,20 +958,17 @@ class muxpGUI:
         """
         Initiates updating the mesh based on the muxp file (filename).
         """
-        ########## GUI SETTINGS AFTER / DURING RUN ################
-        self.muxpfile_select.config(state="disabled")  # disable select option while running
-        self.muxp_start.config(state="disabled")  # also disable a start while running
+        self.muxpfile_select.config(state="disabled")
+        self.muxp_start.config(state="disabled")
         self.config_button.config(state="disabled")
-        def showRunResult(status, info, err=False):  # shows results/errors and re-sets GUI after run
-            self.muxp_status_label.config(text=status)
-            self.info_label.config(text=info)
-            self.muxpfile_select.config(state="normal")
-            self.config_button.config(state="normal")
-            if err:
-                log.error(status + " // " + info)
-            else:
-                log.info(status + " // " + info)
-            self.getConfig()  # re-set all config variables based on config.file for next run
+        self.info_label.config(text="Processing in background...")
+
+        # Start worker thread
+        threading.Thread(target=self._runMuxp_worker, args=(filename,), daemon=True).start()
+
+    def _runMuxp_worker(self, filename):
+        def showRunResult(status, info, err=False):
+            self.msg_queue.put(('result', (status, info, err)))
 
 
         ##### IN CASE CONVERSION FROM KML/WED TO MUXP NEEDED ########
@@ -945,7 +995,7 @@ class muxpGUI:
         error, resultinfo = validate_muxp(update, LogName) 
         log.info("Command Dictionary: {}".format(update))
         if error: #positive values mean that processing can still be performed
-            displayNote(self.window, resultinfo + "\nCheck muxp.log for details.")
+            self.request_ui("display_note", resultinfo + "\nCheck muxp.log for details.")
         if error < 0: #In case of real erros, processing Muxp has to be stopped
             showRunResult("muxp-file validation ERROR", "Validation Error Code {}. Refer muxp.log for details.".format(error), True)
             return -2
@@ -968,9 +1018,7 @@ class muxpGUI:
                     log.info("Auto-detected Ortho4XP pack (7z compressed): {}".format(ortho_pack))
 
         if len(self.dsf_sceneryPack) == 0:  # no scenery pack yet defined (e.g. via config file)
-            self.muxp_status_label.config(text="Searching available meshes for {}. Please WAIT ...".format(update["tile"]))
-            self.muxp_start.config(state="disabled")
-            self.window.update()
+            self.msg_queue.put(('status', "Searching available meshes for {}. Please WAIT ...".format(update["tile"])))
             scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
             log.info("SCENERY PACKS INSTALLED: {}".format(scenery_packs))
             
@@ -980,7 +1028,7 @@ class muxpGUI:
                     log.info("No preferred dsf-file defined in muxp-file. User hast to select...")
                 else:
                     log.info("None of the preferred packs: {}  in muxp-file found.".format(update["source_dsf"]))
-                    warn_return = self.warn_window("The muxp-file has been defined to update mesh files that are\n" +
+                    warn_return = self.request_ui("warn_window", "The muxp-file has been defined to update mesh files that are\n" +
                                      "not installed. Therefore it is recommended to STOP without\n" +
                                      "changing the mesh. You might continue and select an other mesh\n" +
                                      "to be updated, but there is a high chance that this will fail.\n",
@@ -988,7 +1036,7 @@ class muxpGUI:
                     if warn_return == "STOP":
                         showRunResult("Stopped", "Requested Scenery Pack missing", False)
                         return -21
-                self.SelectDSF(scenery_packs)  # will set selected pack to self.dsf_sceneryPack
+                self.request_ui("SelectDSF", scenery_packs)  # will set selected pack to self.dsf_sceneryPack
             else:
                 log.info("Following preferred scenery pack of muxp-file found to be updated: {}".format(preferred_pack))
                 self.dsf_sceneryPack = preferred_pack
@@ -1019,7 +1067,7 @@ class muxpGUI:
         #    dsf_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf"
         #    dsf_output_filname = dsf_filename
         if self.conflictStrategy != "IGNORE": #if IGNORE is set e.g. in config file, do not check for conflicts
-            dsf_filename = self.handleMUXPconflicts(dsf_output_filename, update) #Check for conflicts with existing mesh updates in dsf; might result in an other dsf-file to be processed
+            dsf_filename = self.request_ui("handleMUXPconflicts", dsf_output_filename, update) #Check for conflicts with existing mesh updates in dsf; might result in an other dsf-file to be processed
         else:
             dsf_filename = dsf_output_filename #no conflict so take default (in case of X-Plane default scenery this is clarified below)
             log.info("Conflict Strategey was set to IGNORE, so no check for conflicts!")
@@ -1119,20 +1167,21 @@ class muxpGUI:
                 log.error("Folder {} for storing the MUXP files couldn't be created. So current MUXP file is not saved!".format(installed_muxp_files_dir))
                 installed_muxp_files_dir = None
         if installed_muxp_files_dir:
-            ##### TBD: Error handling if moing/copying does not work #########
-            if filename.rfind("_temporary_conversion_file.muxp") > 0:
-                log.info("TEMPORARY MUXP FILE: {} moved now to: {}\n".format(filename, installed_file))
-                copyfile(filename, installed_file)  # move temporary conversion file to the installed ones
-                remove(filename)
-            else:
-                log.info("Saving MUXP file in installed muxp file folder as: {}".format(installed_file))
-                copyfile(filename, installed_file)
+            try:
+                if filename.rfind("_temporary_conversion_file.muxp") > 0:
+                    log.info("TEMPORARY MUXP FILE: {} moved now to: {}\n".format(filename, installed_file))
+                    copyfile(filename, installed_file)  # move temporary conversion file to the installed ones
+                    remove(filename)
+                else:
+                    log.info("Saving MUXP file in installed muxp file folder as: {}".format(installed_file))
+                    copyfile(filename, installed_file)
+            except (OSError, IOError) as e:
+                log.error("Failed to archive MUXP file: {}".format(e))
 
         
         #################### ACTIVATE SCENERY PACK ################
         if self.activatePack:
-            self.muxp_status_label.config(text = "Checking if updated dsf is active in\n    scenery_packs.ini and updating when required.")  
-            self.window.update()            
+            self.msg_queue.put(('status', "Checking if updated dsf is active in\n    scenery_packs.ini and updating when required."))
             if scenery_packs == None:
                 scenery_packs = findDSFmeshFiles(update["tile"], self.xpfolder, LogName)
             if self.dsf_sceneryPack == self.global_scenery_pack: #in case of default Scenery muxpfolder is the pack
@@ -1147,14 +1196,13 @@ class muxpGUI:
                 for scen in scenery_packs:
                     if scenery_packs[scen] in ["ACTIVE", "PACK"]:
                         before_packs.append(scen)
-                selection = self.warn_window("The scenery package {}\n".format(newSceneryPack) +
+                selection = self.request_ui("warn_window", "The scenery package {}\n".format(newSceneryPack) +
                                  "is currently not activated in scenery_packs.ini\n" +
                                  "In order to see the changes by MUXP this ini-file needs\n" +
                                  "to be updated by placing the package in the ini-file\n" +
                                  "before: {}\n\n".format(before_packs) +
                                  "By pressing OK MUXP will activate the update for you,\n" +
                                  "by pressing CANCEL you have to activate on your own.\n\n")
-
                 if selection == "OK":
                     log.info("Updateing scenery_packs.ini and inserting new pack {} before {} in order that this scenery will be activated in X-Plane".format(newSceneryPack, before_packs))
                     self.activateSceneryPack(newSceneryPack, before_packs)
@@ -1210,8 +1258,7 @@ class muxpGUI:
             ### show currently processed command (incl. name if given) in GUI
             #if "name" in c:
             #    command_name = c["name"]
-            self.muxp_status_label.config(text = "Processing {}\n{}".format(c["_command_info"], c["name"]))  #NEW 1.9: showing full processed command info + name should always be present, but normally empty
-            self.window.update()
+            self.msg_queue.put(('status', "Processing {}\n{}".format(c["_command_info"], c["name"])))
             log.info("--------------------------------------------------------------------")
             log.info("PROCESSING COMMAND: {}".format(c))
             
@@ -1221,8 +1268,7 @@ class muxpGUI:
                     if len(a.atrias) > 1000:
                         num_procs = cpu_count()
                         log.info("Using {} CPU cores for parallel processing ({} triangles)...".format(num_procs, len(a.atrias)))
-                        self.muxp_status_label.config(text = "Processing (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"]))
-                        self.window.update()
+                        self.msg_queue.put(('status', "Processing (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"])))
                         chunk_size = len(a.atrias) // num_procs + 1
                         chunks = [a.atrias[i:i + chunk_size] for i in range(0, len(a.atrias), chunk_size)]
                         with Pool(num_procs) as pool:
@@ -1244,8 +1290,7 @@ class muxpGUI:
                     if len(a.atrias) > 1000:
                         num_procs = cpu_count()
                         log.info("Using {} CPU cores for parallel ramp processing ({} triangles)...".format(num_procs, len(a.atrias)))
-                        self.muxp_status_label.config(text = "Processing Ramp (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"]))
-                        self.window.update()
+                        self.msg_queue.put(('status', "Processing Ramp (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"])))
                         chunk_size = len(a.atrias) // num_procs + 1
                         chunks = [a.atrias[i:i + chunk_size] for i in range(0, len(a.atrias), chunk_size)]
                         with Pool(num_procs) as pool:
@@ -1598,7 +1643,7 @@ class muxpGUI:
                         if not path.isfile(apt_default_file+".beforeMUXP"):  # check if BackupFile exists
                             warn_message += "As this is the first change by MUXP, MUXP will also create\n"
                             warn_message += "a backup file called apt.dat.beforeMUXP in the apt.dat directory."
-                        selection = self.warn_window(warn_message)
+                        selection = self.request_ui("warn_window", warn_message)
                         if selection == "OK":
                             if not path.isfile(apt_default_file + ".beforeMUXP"):  # check if BackupFile exists
                                 copy2(apt_default_file, apt_default_file + ".beforeMUXP")
@@ -1607,8 +1652,7 @@ class muxpGUI:
 
 
         log.info("DSF vertices will be created with scaling: {}".format(elevation_scale))
-        self.muxp_status_label.config(text="Creating new vertices and\n   insert mesh update in dsf file")
-        self.window.update()
+        self.msg_queue.put(('status', "Creating new vertices and\n   insert mesh update in dsf file"))
         a.validate_mesh()
         a.createDSFVertices(elevation_scale)
         ########## FOR TESTING - TO BE REMOVED ##############
