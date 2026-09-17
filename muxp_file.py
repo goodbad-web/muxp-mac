@@ -21,7 +21,7 @@
 
 
 from logging import getLogger
-from os import path, replace, walk, stat
+from os import path, replace, walk
 from math import floor
 from xplnedsf2 import getDSFproperties  ## isDSFoverlay not needed any more
 from muxp_math import doBoundingRectanglesIntersect, segmentToBox
@@ -336,23 +336,20 @@ def findDSFmeshFiles(tile, xpfolder, logname):
             if path.exists(xpfolder + "/" + gs_path):
                 packs[gs_path] = "DEFAULT"
                 break
-        for scenery in next(walk(xpfolder+"/Custom Scenery/"))[1]: #get all scenery pack folders in Custom Secenery
+        custom_scenery = xpfolder + "/Custom Scenery/"
+        for scenery in next(walk(custom_scenery), (None, [], None))[1]: #get all scenery pack folders in Custom Scenery
             next_pack = False
-            for (root, dirs, files) in walk(xpfolder+"/Custom Scenery/"+scenery):
+            for (root, dirs, files) in walk(custom_scenery + scenery):
                 for f in files:
-                    if f[len(f)-4:] != ".dsf": #only consider .dsf-files
+                    if not f.lower().endswith((".dsf", ".dsf.7z")): #only consider DSF files, including compressed DSFs
                         continue
-                    if stat(path.join(root, f)).st_size > 10000: ### Lowered threshold to 10KB to include small meshes
-                        err, props = getDSFproperties(path.join(root, f))
-                        if err:
-                            log.error(props)
-                        else:
-                            if not 'sim/overlay' in props.keys():
-                                packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
-                            elif props["sim/overlay"] == '0': #In case such a definition would exist.....
-                                packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
-                    next_pack = True #after analysis of first .dsf file decide if mesh or not --> WARNING: Might skip small dsf or mixed dsf mesh folders
-                    break
+                    err, props = getDSFproperties(path.join(root, f))
+                    if err:
+                        log.error(props)
+                    elif 'sim/overlay' not in props.keys() or props["sim/overlay"] == '0':
+                        packs["Custom Scenery/"+scenery] = "NEW" #for the moment each found scenery is new
+                        next_pack = True
+                        break
                 if next_pack:
                     break    
 
@@ -668,4 +665,3 @@ def unflatten_apt(filename, icao_id, logname):
             apt.append(line)
 
     return flatten_flag, "".join(apt)
-

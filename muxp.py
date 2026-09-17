@@ -782,12 +782,12 @@ class muxpGUI:
             self.conflictStrategy = "CURRENT"
             return filename
         if (
-    issues[2] == "None"
-    and props[2] is not None
-    and len(getMUXPdefs(props[2])) == 1
-    and updateAlreadyInProps(update['id'], props[2]) is not None
-    and update['version'] >= updateAlreadyInProps(update['id'], props[2])
-):
+            issues[2] == "None"
+            and props[2] is not None
+            and len(getMUXPdefs(props[0])) == 1
+            and updateAlreadyInProps(update['id'], props[0]) is not None
+            and update['version'] >= updateAlreadyInProps(update['id'], props[0])
+        ):
             # in case of no issues with original and the current file only includes the update with same or older version, it can be overwritten
             self.conflictStrategy = "ORIGINAL"
             return filenames[2]
@@ -1453,7 +1453,7 @@ class muxpGUI:
                 elevations = []  # elevation values
                 a.get_mesh_elevation_for_magic_number(c["3d_coordinates"])
                 for p in c["3d_coordinates"]:
-                    ccoords.append(p[:2])  # 3d_coordinates are already [lon, lat, elev]
+                    coords.append(p[:2])  # 3d_coordinates are already [lon, lat, elev]
                     elevations.append(p[2])
                 coords_original = deepcopy(coords)  # save coords as they might be changed by ordering when cutting etc.
                 coords.insert(0, [2*coords[0][0] - coords[1][0], 2*coords[0][1] - coords[1][1]])
@@ -1732,4 +1732,3 @@ if __name__ == "__main__":
     log.info("MUXP runfile: {} \n   processing following files: {}".format(muxpfiles[0], muxpfiles[1:]))
     main = muxpGUI(muxpfiles[0], muxpfiles[1:])  # first element in muxpfiles is argv[0], the runfile
     mainloop() # Required for some environments
-
