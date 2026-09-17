@@ -227,57 +227,77 @@ def CenterInAtrias(atrias):
 
 def segmentToBox(p1, p2, w):
     """
-    Returns for a segement between points p1 and p2 (with [y,x] coordinates)
-    ---> IMPORTANT: matches the not swapped 3d coordinates
-    boundary of a box with length of segement where line is in the middle
-    and the box has width w
+    Returns the boundary of a box around a segment between p1 and p2.
+    Coordinates are [longitude, latitude].
     """
-    degree_dist_at_equator = 111120 #for longitude (or 111300?)
+    degree_dist_at_equator = 111120
     lat_degree_dist_average = 111000
-    degree_dist_at_lat = cos (radians(p1[0])) * degree_dist_at_equator
-    if round (p1[1], 6) == round (p2[1], 6): #segment exactly north-south direction
-        dx = w/2 #difference for longitude in meters to reach corner from center end
-        dy = 0   #difference for latitude in meters to reach corner from center end
-    elif round (p1[0], 6) == round (p2[0], 6): #segment is exactly east-west direction
-        dx = 0
-        dy = w/2
-    else:
-        m = -1 / ((lat2y(p2[0]) - lat2y(p1[0])) / (lon2x(p2[1]) - lon2x(p1[1])))  # gradient of perpendicular line
-        # NEW 04.08.2020 Above gradient is calculated in Mercartor projection to have equal of angle
-        dx = sqrt( ( (w/2)**2) / (1 + m**2))
-        dy = dx * m
-    dx /= degree_dist_at_lat #convert meters in longitute coordinate difference at geographical latitude
-    dy /= lat_degree_dist_average #convert meters in latitude coordinate difference
-    l = []
-    if (p1[1] <= p2[1] and dy >= 0) or (p1[1] > p2[1] and dy < 0): #make sure to always insert in clockwise order
-        l.append([round(p1[1] - dx, 8), round(p1[0] - dy, 8)]) #buttom corner1
-        l.append([round(p1[1] + dx, 8), round(p1[0] + dy, 8)]) #buttom corner2
-        l.append([round(p2[1] + dx, 8), round(p2[0] + dy, 8)]) #top corner1
-        l.append([round(p2[1] - dx, 8), round(p2[0] - dy, 8)]) #top corner2
-    else: #insert vertices in different order to assure clockwise orientation
-        l.append([round(p1[1] + dx, 8), round(p1[0] + dy, 8)])
-        l.append([round(p1[1] - dx, 8), round(p1[0] - dy, 8)])
-        l.append([round(p2[1] - dx, 8), round(p2[0] - dy, 8)])
-        l.append([round(p2[1] + dx, 8), round(p2[0] + dy, 8)])
-    l.append(l[0]) #add first corner to form closed loop
-    return l
 
+    degree_dist_at_lat = cos(radians(p1[1])) * degree_dist_at_equator
+
+    # Same longitude = north-south
+    if round(p1[0], 6) == round(p2[0], 6):
+        dx = w / 2
+        dy = 0
+
+    # Same latitude = east-west
+    elif round(p1[1], 6) == round(p2[1], 6):
+        dx = 0
+        dy = w / 2
+
+    else:
+        m = -1 / (
+            (lat2y(p2[1]) - lat2y(p1[1])) /
+            (lon2x(p2[0]) - lon2x(p1[0]))
+        )
+
+        dx = sqrt(((w / 2) ** 2) / (1 + m ** 2))
+        dy = dx * m
+
+    dx /= degree_dist_at_lat
+    dy /= lat_degree_dist_average
+
+    l = []
+
+    if (p1[0] <= p2[0] and dy >= 0) or (p1[0] > p2[0] and dy < 0):
+        l.append([round(p1[0] - dx, 8), round(p1[1] - dy, 8)])
+        l.append([round(p1[0] + dx, 8), round(p1[1] + dy, 8)])
+        l.append([round(p2[0] + dx, 8), round(p2[1] + dy, 8)])
+        l.append([round(p2[0] - dx, 8), round(p2[1] - dy, 8)])
+    else:
+        l.append([round(p1[0] + dx, 8), round(p1[1] + dy, 8)])
+        l.append([round(p1[0] - dx, 8), round(p1[1] - dy, 8)])
+        l.append([round(p2[0] - dx, 8), round(p2[1] - dy, 8)])
+        l.append([round(p2[0] + dx, 8), round(p2[1] + dy, 8)])
+
+    l.append(l[0])
+    return l
 
 def cut_box_in_segments(box, segment_length):
     """
     Cuts a rectangle box in segments of given length and returns all vertices of new boundary
     """
-    segment_interval_bound = []  # bound including also vertices for interval steps
+    segment_interval_bound = []
+
     for corner1, corner2 in [[1, 2], [3, 0]]:
         interval_steps = int(distance(box[corner1], box[corner2]) / segment_length) + 1
-        interval_vector = [(box[corner2][0] - box[corner1][0]) / interval_steps,
-                           (box[corner2][1] - box[corner1][1]) / interval_steps]
-        segment_interval_bound.append(box[corner1 - 1])  # TBD: Do quicker with extend both values ???
+
+        interval_vector = [
+            (box[corner2][0] - box[corner1][0]) / interval_steps,
+            (box[corner2][1] - box[corner1][1]) / interval_steps
+        ]
+
+        segment_interval_bound.append(box[corner1 - 1])
         segment_interval_bound.append(box[corner1])
-        for i in range(1, interval_steps):  # first and last step not needed as these are corners of segment_bound
-            segment_interval_bound.append(
-                [box[corner1][0] + i * interval_vector[0], box[corner1][1] + i * interval_vector[1]])
-    segment_interval_bound.append(segment_interval_bound[0])  # add first coordinate to get closed poly
+
+        for i in range(1, interval_steps):
+            segment_interval_bound.append([
+                box[corner1][0] + i * interval_vector[0],
+                box[corner1][1] + i * interval_vector[1]
+            ])
+
+    segment_interval_bound.append(segment_interval_bound[0])
+
     return segment_interval_bound
 
 

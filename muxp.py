@@ -781,7 +781,13 @@ class muxpGUI:
             # in case of no issues of current file nothing to do, just stay with current file to be updated
             self.conflictStrategy = "CURRENT"
             return filename
-        if issues[2] == "None" and len(getMUXPdefs(props[0])) == 1 and updateAlreadyInProps(update['id'], props[0]) is not None and update['version'] >= updateAlreadyInProps(update['id'], props[0]):
+        if (
+    issues[2] == "None"
+    and props[2] is not None
+    and len(getMUXPdefs(props[2])) == 1
+    and updateAlreadyInProps(update['id'], props[2]) is not None
+    and update['version'] >= updateAlreadyInProps(update['id'], props[2])
+):
             # in case of no issues with original and the current file only includes the update with same or older version, it can be overwritten
             self.conflictStrategy = "ORIGINAL"
             return filenames[2]
@@ -1447,7 +1453,7 @@ class muxpGUI:
                 elevations = []  # elevation values
                 a.get_mesh_elevation_for_magic_number(c["3d_coordinates"])
                 for p in c["3d_coordinates"]:
-                    coords.append([p[1], p[0]])  # 3d_coordinates need still to be swapped
+                    ccoords.append(p[:2])  # 3d_coordinates are already [lon, lat, elev]
                     elevations.append(p[2])
                 coords_original = deepcopy(coords)  # save coords as they might be changed by ordering when cutting etc.
                 coords.insert(0, [2*coords[0][0] - coords[1][0], 2*coords[0][1] - coords[1][1]])
@@ -1482,9 +1488,6 @@ class muxpGUI:
                 polysouter, polysinner, borderv = a.CutPoly(c["coordinates"], elev_placeholder)
                 a.get_mesh_elevation_for_magic_number(c["3d_coordinates"])
                 ramp_tria = c["3d_coordinates"]  # 3 first 3d-coordinates build the tria for ramp inclination
-                ramp_tria[0][0], ramp_tria[0][1] = ramp_tria[0][1], ramp_tria[0][0]  # 3d coords currently
-                ramp_tria[1][0], ramp_tria[1][1] = ramp_tria[1][1], ramp_tria[1][0]  # NOT SWAPPED
-                ramp_tria[2][0], ramp_tria[2][1] = ramp_tria[2][1], ramp_tria[2][0]  # TBD
                 log.info("Following Tria is used for ramp elevation: {}".format(ramp_tria))
                 for nt, t in enumerate(a.atrias):
                     for v in range(3):
@@ -1638,7 +1641,12 @@ class muxpGUI:
                 raster_bounds = [segment_bound] #include boundary for raster selection
                 xp, yp = [], [] #points for spline to be created
                 for p in c["3d_coordinates"]:
-                    xp.append(distance([c["3d_coordinates"][0][1], c["3d_coordinates"][0][0]], [p[1], p[0]])) #### IMPORTANT: 3d coordinates currently not swapped !!!!!!!! ##################
+                    xp.append(
+                        distance(
+                            c["3d_coordinates"][0][:2],
+                            p[:2]
+                        )
+                    ) # 3d_coordinates already use [lon, lat, elev]!!!!!!!! ##################
                     yp.append(p[2])
                 log.info("Points for spline: {}, {}".format(xp, yp))
                 spline = getspline(xp, yp)
