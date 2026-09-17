@@ -94,7 +94,7 @@ def distance_vector(p, q):  # returns x, y, z distances for as vector for two po
 def distances2coordinates(p, dist):  # returns coordinates for point q which is vector of distances in m away from p
     lat_degree_dist_average = 111000
     degree_dist_at_lat = cos(radians(p[1])) * 111120  # latest is degree_dist_at_equator
-    return [p[0] + dist[0]/degree_dist_at_lat, p[1] + dist[1]/lat_degree_dist_average, dist[2] - p[2]]
+    return [p[0] + dist[0]/degree_dist_at_lat, p[1] + dist[1]/lat_degree_dist_average, p[2] + dist[2]]
 
 def edgeDistance(p, a, b): #calculates distance of point p to edge e from a to b
     vector_ab = (b[0] - a[0], b[1] - a[1])
@@ -116,7 +116,7 @@ def sortPointsAlongPoly(points, poly, epsilon=0.001):
         for i in range(len(poly) - 1):
             edist, odist, dist = edgeDistance(p, poly[i], poly[i+1])
             #print("Check point {} for edge {} results in odist {} and distance {}".format(p, i, odist, edist))
-            if odist < epsilon and edist >= -epsilon and edist <= 1 + epsilon:
+            if abs(dist) < epsilon and edist >= -epsilon and edist <= 1 + epsilon:
                 #print("    added to list")
                 sortedPoints.append([i, edist, p[0], p[1]])
                 break
@@ -408,12 +408,17 @@ def evalspline(x, spline): #evaluates spline at position x
 def interpolatedSegmentElevation(rwy, p, rwySpline): #based on segment's spline profile, the elevation of a point orthogonal to segment is calculated  (segement used to be runway)   
     start = rwy[0][:2] #start coordinates rwy (already lon, lat)
     end = rwy[1][:2] #end coordinates rwy (already lon, lat)
-    startD = (start[0] - 0.1 * (end[0] - start[0]), start[1] - 0.1 * (end[1] - start[1])) #use starting point 10% of rwy length before to really get value for all points around runway
-    endD = (start[0] + 1.1 * (end[0] - start[0]), start[1] + 1.1 * (end[1] - start[1]))   #use end point 10% of rwy length behind to really get value for all points around runway
-    inclination_of_ortho = (lat2y(end[1]) - lat2y(start[1]), lon2x(start[0]) - lon2x(end[0]))  # NEW 04.08.2020 done in Mercartor Projection to keep equal of angle
-    orthoStartD = (p[0] - inclination_of_ortho[0], p[1] - inclination_of_ortho[1]) # Start of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
-    orthoEndD = (p[0] + inclination_of_ortho[0], p[1] + inclination_of_ortho[1]) # End of orthogonal line of RWY through point p with length double of RWY (to guarentee intersection on center line)
-    p_centered = intersect_always(startD, endD, orthoStartD, orthoEndD)  # location of p on center line even if it is outside rwy  #### NEW 22.11.20 #####
+    startD = (lon2x(start[0]), lat2y(start[1]))
+    endD = (lon2x(end[0]), lat2y(end[1]))
+    pD = (lon2x(p[0]), lat2y(p[1]))
+    runway_vector = (endD[0] - startD[0], endD[1] - startD[1])
+    startD = (startD[0] - 0.1 * runway_vector[0], startD[1] - 0.1 * runway_vector[1]) # use starting point 10% before the segment
+    endD = (endD[0] + 0.1 * runway_vector[0], endD[1] + 0.1 * runway_vector[1]) # use end point 10% behind the segment
+    inclination_of_ortho = (-runway_vector[1], runway_vector[0])
+    orthoStartD = (pD[0] - inclination_of_ortho[0], pD[1] - inclination_of_ortho[1]) # Start of orthogonal line through p
+    orthoEndD = (pD[0] + inclination_of_ortho[0], pD[1] + inclination_of_ortho[1]) # End of orthogonal line through p
+    p_centeredD = intersect_always(startD, endD, orthoStartD, orthoEndD)
+    p_centered = [x2lon(p_centeredD[0]), y2lat(p_centeredD[1])]  # back to lon/lat before calculating distance
     d = distance(start, p_centered)
     elev = evalspline(d, rwySpline)
     return elev, d #### d just for TESTING #########
@@ -753,7 +758,12 @@ def earclipTrias(pts):  ###original name of function was triangulate
         A list of tuples. Each tuple contains three coordinates (representingone triangle)
     """
     tri = []
-    plist = pts[::-1] if IsClockwise(pts) else pts[:]
+    points = pts[:]
+    if len(points) > 1 and points[0] == points[-1]:
+        points = points[:-1]
+    if len(points) < 3:
+        return tri
+    plist = points[::-1] if IsClockwise(points) else points[:]
     while len(plist) >= 3:
         #first_point = plist[0] ### NEW: set first point to the end in order to not get all triangles in a convex part from one vertex; HOWEVER takes much longer
         #plist = plist[1:]      ### NEW (above)     BETTER BUT NOT REALLY GOOD --> USE DELAUNEY TRIANGULATION
@@ -880,4 +890,3 @@ def tria_intersection(s, t, v_in_t=None, v_out_t=None):
         return p_intersect
     #### if nothing is known of s and t check for point inside or cutting point and call funciton again ###
     ####### TBD: ALSO RETURN EVENT LIST FOR NEIGHBOURS OF t TO CONTINUE #####
-

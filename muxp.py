@@ -201,10 +201,8 @@ class muxpGUI:
             self.ConfigMenu()
         else:
             if muxpfiles != []: #if muxpfiles given
-                for mf in muxpfiles:
-                    self.select_muxpfile(self.muxpfile_entry, mf)
-                    error = self.runMuxp(mf)  # directly run muxpfile if it was given as argument
-                    if error: break ### TBD: Better have all errors on one list to show
+                self.select_muxpfile(self.muxpfile_entry, muxpfiles[0])
+                self.runMuxp_batch(muxpfiles)  # process files sequentially in one worker
             #else: #OPTION TO DIRECTLY RUN NEW MUXP-FILES IN DIRECTORY; MAY BE TOO MANY OPTIONS ....
             #    self.handle_new_muxp_files()  # in case of new muxpfiles directly process them
         if muxpfiles == [] or error: #program that was run directly, terminates directly in case of no errors
@@ -781,12 +779,21 @@ class muxpGUI:
             # in case of no issues of current file nothing to do, just stay with current file to be updated
             self.conflictStrategy = "CURRENT"
             return filename
+        original_update_version = None
+        if issues[2] == "None" and props[2] is not None:
+            original_update_version = updateAlreadyInProps(update['id'], props[2])
+        original_version_is_compatible = False
+        if original_update_version is not None:
+            try:
+                original_version_is_compatible = float(update['version']) >= float(original_update_version)
+            except (TypeError, ValueError):
+                log.warning("Unable to compare MUXP versions: {} and {}".format(update['version'], original_update_version))
         if (
             issues[2] == "None"
             and props[2] is not None
-            and len(getMUXPdefs(props[0])) == 1
-            and updateAlreadyInProps(update['id'], props[0]) is not None
-            and update['version'] >= updateAlreadyInProps(update['id'], props[0])
+            and len(getMUXPdefs(props[2])) == 1
+            and original_update_version is not None
+            and original_version_is_compatible
         ):
             # in case of no issues with original and the current file only includes the update with same or older version, it can be overwritten
             self.conflictStrategy = "ORIGINAL"
@@ -1002,6 +1009,14 @@ class muxpGUI:
         # Start worker thread
         threading.Thread(target=self._runMuxp_worker, args=(filename,), daemon=True).start()
 
+    def runMuxp_batch(self, filenames):
+        """Initiates sequential updating for a list of MUXP files."""
+        self.muxpfile_select.config(state="disabled")
+        self.muxp_start.config(state="disabled")
+        self.config_button.config(state="disabled")
+        self.info_label.config(text="Processing in background...")
+        threading.Thread(target=self._runMuxp_batch_worker, args=(tuple(filenames),), daemon=True).start()
+
     def _runMuxp_worker(self, filename):
         def showRunResult(status, info, err=False):
             self.msg_queue.put(('result', (status, info, err)))
@@ -1011,6 +1026,23 @@ class muxpGUI:
         except Exception as e:
             log.exception("Unexpected error in worker thread")
             showRunResult("Fatal Error", "Unexpected error: {}\nCheck muxp.log for details.".format(str(e)), True)
+
+    def _runMuxp_batch_worker(self, filenames):
+        result = ("MUXP batch failed", "No file was processed.", True)
+
+        def collectRunResult(status, info, err=False):
+            nonlocal result
+            result = (status, info, err)
+
+        try:
+            for filename in filenames:
+                error = self._runMuxp_worker_internal(filename, collectRunResult)
+                if error:
+                    break
+        except Exception as e:
+            log.exception("Unexpected error in batch worker thread")
+            result = ("Fatal Error", "Unexpected error: {}\nCheck muxp.log for details.".format(str(e)), True)
+        self.msg_queue.put(('result', result))
 
     def _runMuxp_worker_internal(self, filename, showRunResult):
 
@@ -1103,20 +1135,21 @@ class muxpGUI:
                 self.dsf_sceneryPack = self.muxpfolder[self.muxpfolder.find("Custom Scenery"):]  # choose muxpfolder as scenery_pack to update
                 log.info("As muxp-folder {} includes tile {} this will be updated instead of plain default tile.".format(self.dsf_sceneryPack, update["tile"]))
         dsf_output_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf" #this is default dsf filename name for scenery pack
+        dsf_source_filename = dsf_output_filename
         
         # Check if the source file actually exists as .dsf or .dsf.7z
-        if not path.exists(dsf_output_filename):
-            if path.exists(dsf_output_filename + ".7z"):
-                dsf_output_filename = dsf_output_filename + ".7z"
+        if not path.exists(dsf_source_filename):
+            if path.exists(dsf_source_filename + ".7z"):
+                dsf_source_filename = dsf_source_filename + ".7z"
             ### WARNING: In case of default mesh, the dsf_output_filname needs to be changed to the one in muxpfolder (done below)
         #if self.dsf_sceneryPack == self.global_scenery_pack:
         #    log.info("Default mesh was selected to be updated. No need to check for conflicts.")
         #    dsf_filename = self.xpfolder + "/" + self.dsf_sceneryPack + "/Earth nav data/" + get10grid(update["tile"]) + "/" + update["tile"] +".dsf"
         #    dsf_output_filname = dsf_filename
         if self.conflictStrategy != "IGNORE": #if IGNORE is set e.g. in config file, do not check for conflicts
-            dsf_filename = self.request_ui("handleMUXPconflicts", dsf_output_filename, update) #Check for conflicts with existing mesh updates in dsf; might result in an other dsf-file to be processed
+            dsf_filename = self.request_ui("handleMUXPconflicts", dsf_source_filename, update) #Check for conflicts with existing mesh updates in dsf; might result in an other dsf-file to be processed
         else:
-            dsf_filename = dsf_output_filename #no conflict so take default (in case of X-Plane default scenery this is clarified below)
+            dsf_filename = dsf_source_filename #no conflict so take default (in case of X-Plane default scenery this is clarified below)
             log.info("Conflict Strategey was set to IGNORE, so no check for conflicts!")
         if self.conflictStrategy == "CANCEL":
             showRunResult("Nothing updated!", "CANCEL was chosen in conflict handling.")
@@ -1725,7 +1758,7 @@ if __name__ == "__main__":
             muxpfiles.append(f)
         if path.isdir(f):  # in case of directories include all files in it (not going down to sub-directories)
             for (_, _, filenames) in walk(f):
-                filenames = [f + '/' + fn for fn in filenames]  # write directory befor filename to get full path
+                filenames = [f + '/' + fn for fn in filenames if fn.lower().endswith(".muxp")]  # write directory before filename to get full path
                 muxpfiles.extend(filenames)
                 break
 

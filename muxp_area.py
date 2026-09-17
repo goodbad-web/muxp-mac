@@ -832,7 +832,7 @@ class muxpArea:
             select_from_cut = True
 
         for t in self.atrias:  # go through all trias in area
-            if not t[6]:  # Patch not defined for that tria
+            if t[6] is None or t[6] < 0:  # Patch not defined for that tria
                 self.log.error("Patch does not exist for tria: {} --> not exported!!".format(t))
                 continue
             if self.dsf.Patches[t[6]].flag == 1:  # for the moment only export physical triangles !!!!!!
@@ -910,7 +910,7 @@ class muxpArea:
                     if vc in v_raster_elev:
                         v_string += "  # elev from raster"
                     f.write("{}\n".format(v_string))
-            elif type_def.find("meters"):  # export to meters distances from center
+            elif type_def.find("meters") >= 0:  # export to meters distances from center
                 for vc in vertices:
                     x_diff, y_diff, z_diff = distance_vector(center, [vc[0], vc[1], vertices[vc][0]])
                     f.write("v {} {} {}\n".format(round(x_diff, 2), round(y_diff, 2), round(z_diff, 2)))
@@ -1253,7 +1253,7 @@ class muxpArea:
                                         self.log.warning("  Vertex {} does not fit to scaling. Reduced scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
                                 if v[j] > self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]: #v at plane j is higher than scaling allows
                                     if abs(v[j] - self.dsf.Scalings[-1][j][1] - self.dsf.Scalings[-1][j][0]) < 1e-7:  #### NEW 17.12. compare rounded to 1 cm #####
-                                        self.log.warning("Current vertex {} moved slightly out of pool bounds. Set plane {} to maximum {}".format(v, j, self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[.1][j][0]))
+                                        self.log.warning("Current vertex {} moved slightly out of pool bounds. Set plane {} to maximum {}".format(v, j, self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]))
                                         v[j] = self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]
                                         t[vt][j] = self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]
                                     else:
@@ -1299,11 +1299,21 @@ class muxpArea:
         
         #### Define relevant info for raster to be used later ####
         Rwidth = self.dsf.Raster[0].width
+        Rheight = self.dsf.Raster[0].height
+        if Rwidth < 2 or Rheight < 2:
+            return
         xstep = 1 / (Rwidth - 1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
         xbase = int(float(self.dsf.Properties["sim/west"]))
-        Rheight = self.dsf.Raster[0].height
         ystep = 1 / (Rheight -1)  ##### perhaps only -1 when post-centric ---> also above !!! ########################################
         ybase = int(float(self.dsf.Properties["sim/south"]))
+        if xE < 0 or yN < 0 or xW > Rwidth - 2 or yS > Rheight - 2:
+            return
+        xW = max(0, min(xW, Rwidth - 2))
+        xE = max(0, min(xE, Rwidth - 2))
+        yS = max(0, min(yS, Rheight - 2))
+        yN = max(0, min(yN, Rheight - 2))
+        if xW > xE or yS > yN:
+            return
         if Rcentricity == "post-centric": #if post-centricity we have to move dem pixel half width/hight to left/down in order to get pixel center on border of dsf tile
             cx = 0.5 * xstep 
             cy = 0.5 * ystep
@@ -1346,6 +1356,9 @@ class muxpArea:
         Creates trias of given terrain inside the poly.
         Poly is expected to be closed (first = last vertex)
         """
+        if method not in ("earclip", "segment_intervals"):
+            self.log.error("Method {} not supported in createPolyTerrain.".format(method))
+            return []
         patchID = self.getPatchID(terrain) ### WARNING: This new patch has still no poolDefintion in first Command!!!!!
         if method == "earclip":
             if len(earclipTrias(deepcopy(poly[:-1]))) < len(poly) - 3: self.log.error("Earclip does only return {} trias for poly: {}".format(len(earclipTrias(deepcopy(poly))), poly))  #### ERROR CHECKING ONLY ######
@@ -1357,8 +1370,6 @@ class muxpArea:
                 trias.append([poly[l-i], poly[i], poly[l-i-1]])
                 trias.append([poly[i], poly[i+1], poly[l-i-1]])
             self.log.info("Segment Interval Poly generated: {}".format(trias))
-        else:
-            self.log.error("Method {} not supported in createPolyTerrain.".format(method))
         for tria in trias: 
             if len(tria) < 3: self.log.error("creatPolyTerrain method {} has returned less then 3 vertices for poly: {}".format(method, poly))  #### ERROR CHECKING ONLY ######
             new_v = [None, None, None]
@@ -1659,4 +1670,3 @@ class muxpArea:
         for new_t in new_trias:
             self.atrias.append(new_t)
         ### TBD: Re-allgin all vertices and get rid of silver/point/edge only) trias  --> Use validate_mesh() with rounding to 6 decimals, but happesn anyway if last command....
-
