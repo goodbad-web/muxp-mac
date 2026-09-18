@@ -36,10 +36,23 @@ from tkinter import *
 from tkinter.filedialog import askopenfilename, askdirectory
 from sys import argv, exit
 from glob import glob
-from multiprocessing import Pool, cpu_count
+from multiprocessing import Pool
 from functools import partial
+from time import perf_counter
 import threading
 import queue
+from muxp_performance import (
+    PerformanceBackendError,
+    apply_triangle_elevations,
+    default_worker_count,
+    measure_phase,
+    normalize_worker_count,
+    numba_available,
+    resolve_backend,
+    triangles_to_array,
+    update_elevation_array,
+    update_ramp_array,
+)
 
 # Worker functions for multiprocessing
 def update_elevation_worker(chunk, poly, elevation):
@@ -155,6 +168,9 @@ class muxpGUI:
         self.activatePack = 1 #set to 1/True if after writing of updated dsf file user is queried to directly activate pack in scenery_Packs.ini
         self.global_scenery_pack = "Global Scenery/X-Plane 11 Global Scenery" # Default value
         self.autoOrtho4XP = 0 # set to 1/True if Ortho4XP should be automatically searched based on tile
+        self.performance_backend = "auto"
+        self.performance_profiling = 0
+        self.performance_workers = default_worker_count()
 
         self.button_selected = None  # keeps track of selected button in GUI
 
@@ -371,6 +387,40 @@ class muxpGUI:
             log.info("autoOrtho4XP set to: {}".format(self.autoOrtho4XP))
         else:
             self.autoOrtho4XP = 0
+
+        requested_backend = str(c.get("performanceBackend", "auto")).strip().lower()
+        if requested_backend not in ("auto", "python", "numba"):
+            log.warning("Unknown performanceBackend '{}'; using auto.".format(requested_backend))
+            requested_backend = "auto"
+        self.performance_backend = requested_backend
+
+        raw_workers = c.get("performanceWorkers", "auto")
+        try:
+            self.performance_workers = normalize_worker_count(raw_workers)
+        except ValueError as exc:
+            log.warning("Invalid performanceWorkers '{}': {}. Using auto.".format(raw_workers, exc))
+            self.performance_workers = default_worker_count()
+
+        raw_profiling = c.get("performanceProfiling", "0")
+        try:
+            profiling = int(str(raw_profiling).strip())
+            if profiling not in (0, 1):
+                raise ValueError
+            self.performance_profiling = profiling
+        except (TypeError, ValueError):
+            log.warning("Invalid performanceProfiling '{}'; using 0.".format(raw_profiling))
+            self.performance_profiling = 0
+
+        log.info(
+            "Performance settings: backend={}, workers={}, profiling={}, numba_available={}"
+            .format(self.performance_backend, self.performance_workers, self.performance_profiling, numba_available())
+        )
+        if self.performance_backend == "numba" and not numba_available():
+            log.error(
+                "performanceBackend=numba was requested but Numba is unavailable. "
+                "Install it with: python -m pip install -r requirements-accelerated.txt"
+            )
+            return -6
         return 0 #no error
 
 
@@ -661,6 +711,9 @@ class muxpGUI:
             f.write("dsfSourcePack: {}\n".format(self.dsf_sceneryPack))
             f.write("conflictStrategy: {}\n".format(self.conflictStrategy))
             f.write("autoOrtho4XP: {}\n".format(self.autoOrtho4XP))
+            f.write("performanceBackend: {}\n".format(self.performance_backend))
+            f.write("performanceWorkers: {}\n".format(self.performance_workers))
+            f.write("performanceProfiling: {}\n".format(self.performance_profiling))
 
 
     def SelectDSF(self, scenery_packs):
@@ -1029,6 +1082,8 @@ class muxpGUI:
 
     def _runMuxp_batch_worker(self, filenames):
         result = ("MUXP batch failed", "No file was processed.", True)
+        initial_dsf_scenery_pack = self.dsf_sceneryPack
+        initial_conflict_strategy = self.conflictStrategy
 
         def collectRunResult(status, info, err=False):
             nonlocal result
@@ -1036,6 +1091,10 @@ class muxpGUI:
 
         try:
             for filename in filenames:
+                # Selection state is per MUXP file. Do not reuse the pack or
+                # conflict choice resolved while processing the previous file.
+                self.dsf_sceneryPack = initial_dsf_scenery_pack
+                self.conflictStrategy = initial_conflict_strategy
                 error = self._runMuxp_worker_internal(filename, collectRunResult)
                 if error:
                     break
@@ -1166,10 +1225,22 @@ class muxpGUI:
                 copy2(dsf_filename, dsf_output_filename + ".muxp.original")
         log.info("Loading dsf file {}".format(dsf_filename))
         self.current_action = "read"
-        self.dsf.read(dsf_filename)
+        with measure_phase(
+            log,
+            "dsf_read",
+            bool(getattr(self, "performance_profiling", 0)),
+            filename=path.basename(dsf_filename),
+        ):
+            self.dsf.read(dsf_filename)
         
         ############## START PROCESSING MUXP FILE ON DSF FILE ################
-        muxp_process_error = self.processMuxp(dsf_filename, update)  ### Returns return value of processing
+        with measure_phase(
+            log,
+            "muxp_process",
+            bool(getattr(self, "performance_profiling", 0)),
+            tile=update.get("tile", ""),
+        ):
+            muxp_process_error = self.processMuxp(dsf_filename, update)  ### Returns return value of processing
         if muxp_process_error:
             if muxp_process_error == 99:  # special command for exiting without update
                 showRunResult("Muxp file includes exit command.", "No update saved!", False)
@@ -1229,7 +1300,14 @@ class muxpGUI:
             log.info("Created output directory: {}".format(output_dir))
 
         log.info("Writing updated dsf file to: {}".format(dsf_output_filename))
-        self.dsf.write(dsf_output_filename)
+        with measure_phase(
+            log,
+            "dsf_write",
+            bool(getattr(self, "performance_profiling", 0)),
+            filename=path.basename(dsf_output_filename),
+        ):
+            self.dsf.write(dsf_output_filename)
+        clearDSFpropertiesCache(dsf_output_filename)
         
         # If we wrote a .dsf but a .dsf.7z exists, remove the .7z to avoid X-Plane confusion
         if dsf_output_filename.endswith(".dsf"):
@@ -1292,6 +1370,121 @@ class muxpGUI:
         showRunResult("Finished Mesh Update {} successful".format(path.basename(filename)), "Scenery Pack {} adapted.".format(self.dsf_sceneryPack))
         return 0 #processed muxp without error    
         
+    def _update_elevation_python(self, triangles, polygon, elevation=None, ramp_tria=None, command_name=""):
+        """Run the existing Python/Pool implementation with bounded workers."""
+
+        if len(triangles) > 1000:
+            num_procs = min(
+                getattr(self, "performance_workers", default_worker_count()),
+                len(triangles),
+            )
+            if ramp_tria is None:
+                log.info(
+                    "Using {} CPU cores for Python parallel processing ({} triangles)."
+                    .format(num_procs, len(triangles))
+                )
+                self.msg_queue.put(
+                    ('status', "Processing (Multi-CPU: {} cores)\n{}".format(num_procs, command_name))
+                )
+                chunk_size = len(triangles) // num_procs + 1
+                chunks = [triangles[i:i + chunk_size] for i in range(0, len(triangles), chunk_size)]
+                with Pool(num_procs) as pool:
+                    worker = partial(update_elevation_worker, poly=polygon, elevation=elevation)
+                    results = pool.map(worker, chunks)
+            else:
+                log.info(
+                    "Using {} CPU cores for Python parallel ramp processing ({} triangles)."
+                    .format(num_procs, len(triangles))
+                )
+                self.msg_queue.put(
+                    ('status', "Processing Ramp (Multi-CPU: {} cores)\n{}".format(num_procs, command_name))
+                )
+                chunk_size = len(triangles) // num_procs + 1
+                chunks = [triangles[i:i + chunk_size] for i in range(0, len(triangles), chunk_size)]
+                with Pool(num_procs) as pool:
+                    worker = partial(update_ramp_worker, poly=polygon, ramp_tria=ramp_tria)
+                    results = pool.map(worker, chunks)
+            triangles[:] = [triangle for result in results for triangle in result]
+            return "python-pool"
+
+        if ramp_tria is None:
+            for triangle in triangles:
+                for vertex_index in range(3):
+                    if PointInPoly(triangle[vertex_index][0:2], polygon):
+                        triangle[vertex_index][2] = elevation
+        else:
+            for triangle in triangles:
+                for vertex_index in range(3):
+                    if PointInPoly(triangle[vertex_index][0:2], polygon):
+                        l0, l1 = PointLocationInTria(triangle[vertex_index][:2], ramp_tria)
+                        triangle[vertex_index][2] = (
+                            ramp_tria[2][2]
+                            + l0 * (ramp_tria[0][2] - ramp_tria[2][2])
+                            + l1 * (ramp_tria[1][2] - ramp_tria[2][2])
+                        )
+        return "python"
+
+    def _update_elevation_with_backend(self, area, polygon, elevation=None, ramp_tria=None, command_name=""):
+        """Use Numba when selected, otherwise preserve the existing Python path."""
+
+        info = resolve_backend(
+            getattr(self, "performance_backend", "auto"),
+            len(area.atrias),
+            getattr(self, "performance_workers", default_worker_count()),
+        )
+        if info.selected == "numba":
+            self.msg_queue.put(
+                ('status', "Processing (Numba CPU: {} threads)\n{}".format(info.workers, command_name))
+            )
+            coordinates = triangles_to_array(area.atrias)
+            try:
+                if ramp_tria is None:
+                    updated = update_elevation_array(
+                        coordinates,
+                        polygon,
+                        elevation,
+                        backend="numba",
+                        workers=info.workers,
+                    )
+                else:
+                    updated = update_ramp_array(
+                        coordinates,
+                        polygon,
+                        ramp_tria,
+                        backend="numba",
+                        workers=info.workers,
+                    )
+            except Exception as exc:
+                if info.requested == "auto":
+                    log.warning(
+                        "Numba backend failed for command '{}'; falling back to Python: {}"
+                        .format(command_name, exc)
+                    )
+                    return self._update_elevation_python(
+                        area.atrias,
+                        polygon,
+                        elevation=elevation,
+                        ramp_tria=ramp_tria,
+                        command_name=command_name,
+                    )
+                raise PerformanceBackendError(
+                    "Numba backend failed for command '{}': {}".format(command_name, exc)
+                ) from exc
+            apply_triangle_elevations(area.atrias, updated)
+            log.info(
+                "Numba CPU backend completed command '{}' using {} threads."
+                .format(command_name, info.workers)
+            )
+            return "numba"
+
+        return self._update_elevation_python(
+            area.atrias,
+            polygon,
+            elevation=elevation,
+            ramp_tria=ramp_tria,
+            command_name=command_name,
+        )
+
     def processMuxp(self, filename, update):
         """
         Adapts the self.dsf according the muxp commands stored in update dict.
@@ -1301,7 +1494,13 @@ class muxpGUI:
         #self.dsf.read(filename)
         a = muxpArea(self.dsf, LogName)
         log.info("Area to be extracted: {}".format(update["area"]))
-        a.extractMeshArea(*update["area"])
+        with measure_phase(
+            log,
+            "mesh_extract",
+            bool(getattr(self, "performance_profiling", 0)),
+            tile=update.get("tile", ""),
+        ):
+            a.extractMeshArea(*update["area"])
         elevation_scale = update["elevation_step"]
         if elevation_scale is None:  # not set in MUXP file; use default value
             elevation_scale = 1/51  # default setting are 0.0196 m steps for different elevations in mesh
@@ -1333,7 +1532,27 @@ class muxpGUI:
             kmlExport2(self.dsf, [areabound], a.atrias, kml_filename + "_0")
 
 
+        previous_command_timing = None
         for c_index, c in enumerate(update["commands"]): #now go through all commands to update
+            if previous_command_timing is not None:
+                started, previous_index, previous_command, previous_name = previous_command_timing
+                log.info(
+                    "[performance] command_index={} command={} name={} elapsed_ms={:.3f}".format(
+                        previous_index,
+                        previous_command,
+                        previous_name,
+                        (perf_counter() - started) * 1000.0,
+                    )
+                )
+            if getattr(self, "performance_profiling", 0):
+                previous_command_timing = (
+                    perf_counter(),
+                    c_index,
+                    c.get("command", ""),
+                    c.get("name", ""),
+                )
+            else:
+                previous_command_timing = None
             
             ### show currently processed command (incl. name if given) in GUI
             #if "name" in c:
@@ -1345,42 +1564,32 @@ class muxpGUI:
             if c["command"] == "update_elevation_in_poly":
                 if c["elevation"] is not None:
                     log.info("Updating elevation to: {} in polygon: {}".format(c["elevation"], c["coordinates"]))
-                    if len(a.atrias) > 1000:
-                        num_procs = cpu_count()
-                        log.info("Using {} CPU cores for parallel processing ({} triangles)...".format(num_procs, len(a.atrias)))
-                        self.msg_queue.put(('status', "Processing (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"])))
-                        chunk_size = len(a.atrias) // num_procs + 1
-                        chunks = [a.atrias[i:i + chunk_size] for i in range(0, len(a.atrias), chunk_size)]
-                        with Pool(num_procs) as pool:
-                            worker = partial(update_elevation_worker, poly=c["coordinates"], elevation=c["elevation"])
-                            results = pool.map(worker, chunks)
-                        a.atrias = [t for res in results for t in res]
-                    else:
-                        for t in a.atrias: #go through all trias in area
-                            for v in range(3): #all their points
-                                if PointInPoly(t[v][0:2], c["coordinates"]):
-                                    t[v][2] = c["elevation"]
+                    try:
+                        backend_used = self._update_elevation_with_backend(
+                            a,
+                            c["coordinates"],
+                            elevation=c["elevation"],
+                            command_name=c["name"],
+                        )
+                    except PerformanceBackendError as exc:
+                        log.error("Elevation update backend error: {}".format(exc))
+                        return -80
+                    log.info("Elevation update backend: {}".format(backend_used))
                 elif "3d_coordinates" in c:
                     a.get_mesh_elevation_for_magic_number(c["3d_coordinates"])
                     ramp_tria = c["3d_coordinates"]  # 3 first 3d-coordinates build the tria for ramp inclination
                     log.info("Following Tria is used for setting elevation: {}".format(ramp_tria))
-                    if len(a.atrias) > 1000:
-                        num_procs = cpu_count()
-                        log.info("Using {} CPU cores for parallel ramp processing ({} triangles)...".format(num_procs, len(a.atrias)))
-                        self.msg_queue.put(('status', "Processing Ramp (Multi-CPU: {} cores)\n{}".format(num_procs, c["name"])))
-                        chunk_size = len(a.atrias) // num_procs + 1
-                        chunks = [a.atrias[i:i + chunk_size] for i in range(0, len(a.atrias), chunk_size)]
-                        with Pool(num_procs) as pool:
-                            worker = partial(update_ramp_worker, poly=c["coordinates"], ramp_tria=ramp_tria)
-                            results = pool.map(worker, chunks)
-                        a.atrias = [t for res in results for t in res]
-                    else:
-                        for nt, t in enumerate(a.atrias):
-                            for v in range(3):
-                                if PointInPoly(t[v][0:2], c["coordinates"]):  # adapt all vertices inside polygon
-                                    l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
-                                    t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (
-                                                ramp_tria[1][2] - ramp_tria[2][2])
+                    try:
+                        backend_used = self._update_elevation_with_backend(
+                            a,
+                            c["coordinates"],
+                            ramp_tria=ramp_tria,
+                            command_name=c["name"],
+                        )
+                    except PerformanceBackendError as exc:
+                        log.error("Ramp update backend error: {}".format(exc))
+                        return -80
+                    log.info("Ramp update backend: {}".format(backend_used))
                 else:
                     log.warning("Command {} does neither have value to set elevation nor 3d_coordinates for elevation by triangle. So nothing changed".format(c["command"]))
                 if self.kmlExport:
@@ -1440,18 +1649,18 @@ class muxpGUI:
                     points_in_chain = []
                     for v in chain:
                         if PointInPoly((self.dsf.V32[v[0]][v[1]][0], self.dsf.V32[v[0]][v[1]][1]), c["coordinates"]):
-                            log.info(v)
+                            log.debug(v)
                             points_in_chain.append(v) #keep all vertices of current chain that are in polygon
                     if len(points_in_chain) > 1: #only consider chains that have at least two points in polygon
                         log.info("Network chain in Poly {}".format(chain))
                         for p in points_in_chain:
-                            log.info("    Is currently in chain as {} id {} to: {}".format(p[0], p[1], self.dsf.V32[p[0]][p[1]]))
+                            log.debug("    Is currently in chain as {} id {} to: {}".format(p[0], p[1], self.dsf.V32[p[0]][p[1]]))
                             min_dist = 9999999 #set to max value to find minimum
                             for elevp in c["road_coords_drapped"]:
                                 if distance(self.dsf.V32[p[0]][p[1]][:2], elevp[:2]) < min_dist: #new minimum found
                                     min_dist = distance((self.dsf.V32[p[0]][p[1]][:2]), elevp[:2])
                                     self.dsf.V32[p[0]][p[1]][2] = elevp[2] # update elevation for network vertex
-                            log.info("    Updated vertex pool {} id {} to: {}".format(p[0], p[1], self.dsf.V32[p[0]][p[1]]))
+                            log.debug("    Updated vertex pool {} id {} to: {}".format(p[0], p[1], self.dsf.V32[p[0]][p[1]]))
                 ##### TBD: kml-export with roads ###
                 
             if c["command"] == "cut_polygon":
@@ -1527,7 +1736,7 @@ class muxpGUI:
                         if t[v][2] == elev_placeholder:  # adapt all marked vertices with elev. from position on ramp
                             l0, l1 = PointLocationInTria(t[v][:2], ramp_tria)
                             t[v][2] = ramp_tria[2][2] + l0 * (ramp_tria[0][2] - ramp_tria[2][2]) + l1 * (ramp_tria[1][2] - ramp_tria[2][2])
-                            log.info("Vertex no. {} of tria no. {} at {} set to ramp-elevation {} with l0={} and l1={}".format(v, nt, t[v][:2], t[v][2], l0, l1))
+                            log.debug("Vertex no. {} of tria no. {} at {} set to ramp-elevation {} with l0={} and l1={}".format(v, nt, t[v][:2], t[v][2], l0, l1))
                 # elevation_scale = 0.05  # is now default value and configurable in MUXP File
                 shown_polys = polysouter
                 for pol in shown_polys:
@@ -1730,10 +1939,28 @@ class muxpGUI:
                                 f.write(new_aptdat)
 
 
+        if previous_command_timing is not None:
+            started, previous_index, previous_command, previous_name = previous_command_timing
+            log.info(
+                "[performance] command_index={} command={} name={} elapsed_ms={:.3f}".format(
+                    previous_index,
+                    previous_command,
+                    previous_name,
+                    (perf_counter() - started) * 1000.0,
+                )
+            )
+
         log.info("DSF vertices will be created with scaling: {}".format(elevation_scale))
         self.msg_queue.put(('status', "Creating new vertices and\n   insert mesh update in dsf file"))
-        a.validate_mesh()
-        a.createDSFVertices(elevation_scale)
+        with measure_phase(
+            log,
+            "mesh_finalize",
+            bool(getattr(self, "performance_profiling", 0)),
+            triangles=len(a.atrias),
+        ):
+            a.validate_mesh()
+            a.createDSFVertices(elevation_scale)
+            a.insertMeshArea()
         ########## FOR TESTING - TO BE REMOVED ##############
         #log.info("++++ LIST OF VERTICES ++++")
         #for t in a.atrias:
@@ -1742,7 +1969,6 @@ class muxpGUI:
         #log.info("+++++ SCALINGS +++++")
         #for sn, s in enumerate(a.dsf.Scalings):
         #    log.info("{}: {}".format(sn, s))
-        a.insertMeshArea()
 
 
 

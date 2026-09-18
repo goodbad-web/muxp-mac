@@ -200,7 +200,7 @@ class muxpArea:
                 if (round(v[0], 7), round(v[1], 7)) in cdict:
                     old_elev = v[2]
                     v[2] = cdict[(round(v[0], 7), round(v[1], 7))]
-                    self.log.info("  Setting at: {} unique elevation from: {} to: {}".format(v[:2], old_elev, v[2]))
+                    self.log.debug("  Setting at: {} unique elevation from: {} to: {}".format(v[:2], old_elev, v[2]))
                     vertices += 1
         self.log.info("{} vertices on {} coords set to unique elevation".format(vertices, len(coords)))
 
@@ -215,7 +215,7 @@ class muxpArea:
                     removed_triangles.append(t)
                     break  # NEW 8.2.2021: to avoid to add t several times in case tria is one point
         for t in removed_triangles:
-            self.log.info("Flat triangle {} is removed".format(t))
+            self.log.debug("Flat triangle {} is removed".format(t))
             self.atrias.remove(t)
 
     def mesh_elevation(self, p, epsilon=0.0001):
@@ -283,9 +283,9 @@ class muxpArea:
                     ###        at least info on border_vertices (but only returning them causes error in calling function as this expects then a cut has happened
                     cuttingPoint = None
                 if cuttingPoint: #segement of c did cut segment of p, so we now enter/leave p
-                    self.log.info("   not confirmed cutting point {}: with c-segment:{} after distance:{}".format(cuttingPoint, i, distance(c[i], cuttingPoint)))
+                    self.log.debug("   not confirmed cutting point {}: with c-segment:{} after distance:{}".format(cuttingPoint, i, distance(c[i], cuttingPoint)))
                     if i != c_start or distance(c[i], cuttingPoint) > c_start_distance: #cuts on start_segement before distance are not counted
-                        self.log.info("   cutting point {}: with c-segment:{} after distance:{}".format(cuttingPoint, i, distance(c[i], cuttingPoint)))
+                        self.log.debug("   cutting point {}: with c-segment:{} after distance:{}".format(cuttingPoint, i, distance(c[i], cuttingPoint)))
                         if round(distance(c[i], cuttingPoint), 3) in cP_dict: #### NEW 5.10.20 special case
                             self.log.warning("Tangent cutting point at {} detected or cutting very very sharp tria!".format(cuttingPoint))
                             cP_dict[round(distance(c[i], cuttingPoint), 3)+000.1] = [cuttingPoint, j]
@@ -468,12 +468,12 @@ class muxpArea:
             shifts = 0 #counting how many shifts for next vertex in p have been performed ot find vertex outside tria as starting point
             while isPointInTria(p[0], tria): #make sure that first vertex of p is outside tria
                 if shifts >= len(p): #special case that whole p is in tria, all vertices of p are inside
-                    self.log.info("Polygon p lies completely in tria {}".format(tria))
+                    self.log.debug("Polygon p lies completely in tria {}".format(tria))
                     for start_p in range(len(p)-1): #### ASSUMING CLOSED P ###########
                         for segment in range(len(p)-1): ### ASSUMING CLOSED P #########
                             cp = intersection(tria[0], p[start_p], p[segment], p[segment+1])  ###### IMPORTANT TBD: tria[0] might be different for trias lying one over the other in different patches !!!!! ####
                                 ###### ==> TBD: instead of starting with tria[0] always start with most S/SW corner !!! #######################
-                            self.log.info("For start {} with segment {} cutting point: {}".format(start_p, segment, cp))
+                            self.log.debug("For start {} with segment {} cutting point: {}".format(start_p, segment, cp))
                             if cp:
                                 if round(cp[0],7) == round(p[start_p][0],7) and round(cp[1],7) == round(p[start_p][1],7):
                                     cp = None #if cutting point is just the point we want to sart inside p this is okay, does not count for cutting point
@@ -486,7 +486,7 @@ class muxpArea:
                                 o.append(p[p_v])
                             for p_v in range(len(p)-2, start_p-1,-1): #go from last back to start in p ##### ASSUMING CLOSED P, as last is not added again as equal to p[0] ############
                                 o.append(p[p_v]) ### as o is not closed we do not need to add again tria[0]
-                            self.log.info("Outer Polygon around p inside tria is: {}".format(o))
+                            self.log.debug("Outer Polygon around p inside tria is: {}".format(o))
                             p_inside_one_tria = True
                             o = [o] #o is list of outer polygons, here just o itself
                             i = [deepcopy(p)] #inner polygon is p  #### deepcopy required???
@@ -503,8 +503,8 @@ class muxpArea:
                 if not p_inside_one_tria: #if p is inside one tria, don't really shift vertices of p, to always have same triangulation of the tria containing p
                     p = p[1:] ############# TBD: SHIFTING DOES ASSUME CLOSED P, as verst vertex is ommitted and stays only if it is also last in the list !!! #########
                     p.append(p[0])
-                    self.log.info("p[0] inside tria --> shifting poly {}".format(p))
-                    self.log.info("       to poly {}".format(p))
+                    self.log.debug("p[0] inside tria --> shifting poly {}".format(p))
+                    self.log.debug("       to poly {}".format(p))
 
             if not p_inside_one_tria: #if p is inside one tria, no PolyCutPoly required
                 o, i, b = self.PolyCutPoly(tria, p)
@@ -517,7 +517,7 @@ class muxpArea:
                             #inside_tria[tv][2] = elev ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
                             t[tv][2] = elev
                         #new_trias.append(inside_tria) ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
-                        self.log.info("Adapted elevation in inside tria. New Tria: {}".format(t)) #was format(inside_tria) ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
+                        self.log.debug("Adapted elevation in inside tria. New Tria: {}".format(t)) #was format(inside_tria) ### 11.04.2020 WHY copy inside tria? Just adapt elevation !!! ##########
                 else: #tria is completely within p and inner trias shall be removed
                     old_trias.append(t) #so remove it
                     
@@ -535,9 +535,9 @@ class muxpArea:
                         new_trias.append([new_v[0], new_v[1], new_v[2], t[3], t[4], t[5], t[6]])
 
             for poly in o: #outer polys have always to be earclipped, but no elevation/terrian change
-                self.log.info("Earclipping outer poly: {}".format(poly)) ############### ERROR CHECKING, TO BE REMOVED ##############
+                self.log.debug("Earclipping outer poly: {}".format(poly)) ############### ERROR CHECKING, TO BE REMOVED ##############
                 clipped_trias = earclipTrias(deepcopy(poly))
-                self.log.info("Clipped Trias: {}".format(clipped_trias))
+                self.log.debug("Clipped Trias: {}".format(clipped_trias))
                 if len(clipped_trias) != len(poly) - 2: self.log.error("Earclip does return {} trias for {} vertices for poly: {}".format(len(clipped_trias), len(poly), poly))  #### ERROR CHECKING ONLY ######
                 for tria in clipped_trias: #earclip want's polygon without last vertex as returned by PolyCutPoly; earclip should always return clockwise order
                     if len(tria) < 3: self.log.error("Earclipp has returned tria with less then 3 vertices for poly: {}".format(poly))  #### ERROR CHECKING ONLY ######
@@ -546,7 +546,7 @@ class muxpArea:
                     for e in range(3):
                         new_v[e] = createFullCoords(tria[e][0], tria[e][1], t)
                     new_trias.append([new_v[0], new_v[1], new_v[2], t[3], t[4], t[5], t[6]])
-                    self.log.info("+++ TRIA IN OUTER POLY APPENDED: {}".format(new_trias[-1])) ######## LOG JUST FOR TESTING, TO BE REMOVED ###########
+                    self.log.debug("+++ TRIA IN OUTER POLY APPENDED: {}".format(new_trias[-1])) ######## LOG JUST FOR TESTING, TO BE REMOVED ###########
                      
             if b != []: #we have border vertices, so there was a cut in this tria
                 old_trias.append(t) #so this tria is replaced by trias of inner and outer polys ###### OPEN: BETTER REMOVE TRIAS IN DIFFERENT PARTS ABOVE DEPENDING ON CONTEXT ???? #########
@@ -554,11 +554,11 @@ class muxpArea:
             self.atrias.append(nt)
             #### tbd: adapt elevation for all trias (only outer if p own mesh) and create for inner trias new terrain patches if terrain given
         for ot in old_trias: #and remove old ones
-            self.log.info("Following Tria is removed: {}".format(ot))
+            self.log.debug("Following Tria is removed: {}".format(ot))
             try: #as we might cross same tria several times there might several removals for same tria
                 self.atrias.remove(ot)
             except ValueError:
-                self.log.info("   was already removed...")
+                self.log.debug("   was already removed...")
         
         ########### TBD: Better set elevation outside, to also distinguish there for profile elevation ... #######################
         if elev != None: #Adapt elevevation of border vertices
@@ -662,7 +662,7 @@ class muxpArea:
         If not order is changed to be clockwise
         """
         if not IsClockwise([tria[0][:2], tria[1][:2], tria[2][:2]]):
-            self.log.info("Changing following tria to clockwise order: {}".format(tria))
+            self.log.debug("Changing following tria to clockwise order: {}".format(tria))
             tria = [tria[2], tria[1], tria[0], tria[5], tria[4], tria[3], tria[6]]
         return tria
 
@@ -986,7 +986,7 @@ class muxpArea:
             if not IsClockwise(borderv):
                 borderv.reverse()  # outer polygon for later triangulation should be clockwise
             for v in borderv:
-                self.log.info("Border Vertex after Cut: {}".format(v))
+                self.log.debug("Border Vertex after Cut: {}".format(v))
 
         elif type_def.find("cut_obj_outline") >= 0:  # now we have outline we can remove from current mesh via cut
             borderland = obj_outline  # exact match with cut, no borderland; just border of the outer edges of inserted mesh
@@ -1039,7 +1039,7 @@ class muxpArea:
                             if (round(tria[e][0], 7), round(tria[e][1], 7)) == (round(t[v][0], 7), round(t[v][1], 7)):
                                 elev = t[v][2]
                                 elev_found = True
-                                self.log.info("Elevation of borderland vertex {} is {}".format(tria[e], elev))
+                                self.log.debug("Elevation of borderland vertex {} is {}".format(tria[e], elev))
                         if elev_found: break
                     if not elev_found:
                         self.log.error("No elevation found for borderland vertex: {}. Mesh not inserted!".format(tria[e]))
@@ -1047,8 +1047,8 @@ class muxpArea:
                     new_v[e] = [tria[e][0], tria[e][1], elev, 0, 0]
                     # This version only creates simple vertices without vertex normals and without s/t coordinates
                 self.atrias.append([new_v[0], new_v[1], new_v[2], [None, None], [None, None], [None, None], patch_id_terrain])
-                self.log.info("Borderland Tria added: {}".format(self.atrias[-1]))
-                # As tria is completely new, there is no pool/patchID where tria is inside, so None
+            self.log.debug("Borderland Tria added: {}".format(self.atrias[-1]))
+            # As tria is completely new, there is no pool/patchID where tria is inside, so None
         return borderland
 
     def calculate_vertex_normals(self, poly):
@@ -1085,8 +1085,8 @@ class muxpArea:
                           (round(t[2][0], 7), round(t[2][1], 7), round(self.dsf.getVertexElevation(*t[2][:3]), 2))]
                     u = distance_vector(tc[2], tc[0])  # span tria with u, v vectors starting at 3rd point in tria
                     v = distance_vector(tc[2], tc[1])
-                    self.log.info("tria: {}".format(tc))
-                    self.log.info("  u: {}   v: {}".format(u, v))  # TO BE REMOVED -- TESTING ONLY -- #############
+                    self.log.debug("tria: {}".format(tc))
+                    self.log.debug("  u: {}   v: {}".format(u, v))  # TO BE REMOVED -- TESTING ONLY -- #############
                     # COULD BE MORE EFFICIENT TO CALCULATE DISTANCE AS THIS IS JUST FOR X AND Y SEPARATE !!! ##########
                     tn = [u[1]*v[2] - u[2]*v[1], u[2]*v[0] - u[0]*v[2], u[0]*v[1] - u[1]*v[0]]  # normal vector for tria t
                     tn_length = sqrt(tn[0]**2 + tn[1]**2 + tn[2]**2)
@@ -1100,7 +1100,7 @@ class muxpArea:
                     if tn[2] < 0:  # make sure that z-vector is always showing upside
                         l *= -1
                     tnn = [l * tn[0], l*tn[1], l*tn[2]]  # face normal on tria t normalized to length 1
-                    self.log.info("  Normal vector for tria (weighted by tria size): {}".format(tnn))
+                    self.log.debug("  Normal vector for tria (weighted by tria size): {}".format(tnn))
                     for i in range(3):
                         vc2 = tc[i][0:2]  # just first two coordinates of tria vertices
                         if PointInPoly(vc2, poly):
@@ -1117,13 +1117,13 @@ class muxpArea:
             vn = normal_dict[v]
             l = 1 / sqrt(vn[0] ** 2 + vn[1] ** 2 + vn[2] ** 2)
             normal_dict[v] = [l*vn[0], l*vn[1], l*vn[2]]
-            self.log.info("Vertex {} gets vertex normal: {}".format(v, vn))
-            self.log.info("   Based on following face normals: {}".format(nl_dict[v]))
+            self.log.debug("Vertex {} gets vertex normal: {}".format(v, vn))
+            self.log.debug("   Based on following face normals: {}".format(nl_dict[v]))
 
         for t in self.atrias:  # now check all vertices incl. non physical ones if they get new normal vector
             for v in t[:3]:
                 if (round(v[0], 7), round(v[1], 7)) in normal_dict:
-                    self.log.info("Setting for {} normal to {}".format(v, normal_dict[(round(v[0], 7), round(v[1], 7))]))
+                    self.log.debug("Setting for {} normal to {}".format(v, normal_dict[(round(v[0], 7), round(v[1], 7))]))
                     v[3] = normal_dict[(round(v[0], 7), round(v[1], 7))][0]  # positive value to east
                     v[4] = normal_dict[(round(v[0], 7), round(v[1], 7))][1]  # positive value to south (in XP spec BUT positive is to North !!!)
                     # direction upwards is calculated by XP; possible as the vector is normalized
@@ -1146,7 +1146,11 @@ class muxpArea:
                 if t[vt+3][0] != None and t[vt+3][1] != None: #in case of completely new tria we have no previous vertices and new ones need to be created in any case
                     for vti in range(len(t[vt])):
                         if round(t[vt][vti], 7) != round(self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti], 7):  #### NEW 17.12. compare rounded to 1 cm #####
-                            self.log.info("Reference for vertex {} not correct any more. {} differs to {}!".format(self.atrias.index(t), t[vt][vti], self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti]))
+                            if self.log.isEnabledFor(10):
+                                self.log.debug(
+                                    "Reference for vertex {} not correct any more. {} differs to {}!"
+                                    .format(self.atrias.index(t), t[vt][vti], self.dsf.V[t[vt+3][0]][t[vt+3][1]][vti])
+                                )
                             break
                         count += 1
                 if len(t[vt]) != count: #the reference for this vertex to the pool is not correct any more, new vertex needs to be inserted in dsf
@@ -1191,7 +1195,7 @@ class muxpArea:
                                     self.dsf.V[poolID4v][ev_index][2] = v[2] #adapt lower existing vertex elevation with elevation of higher new vertex
                                 else:
                                     v[2] = ev[2] #adapt lower new vertex with elevation of existing higher one
-                                self.log.info("      Now new vertex has elevation {}m".format(self.dsf.V[poolID4v][ev_index][2]))
+                                self.log.debug("      Now new vertex has elevation {}m".format(self.dsf.V[poolID4v][ev_index][2]))
                                 ### We also need to continue check if same vertex can be used or new vertex has to be created because of different higher coordinates
                                 for i in range(3,len(v)): #check for all planes/coordinates whether they are nearly equal
                                     if abs(ev[i] - v[i]) >= self.dsf.Scalings[poolID4v][i][0] / 65535: #if difference is lower than scale multiplier both coordinates would end up same after endcoding, so they match
@@ -1199,25 +1203,25 @@ class muxpArea:
                                     counter +=1
                             if counter == len(v): #matching vertex found          #### NEW 31.03.2020: was before first if case ####
                                 t[vt+3] = [poolID4v, ev_index]  #### NEW 31.03.2020  was before set to [poolID4v, self.dsf.V[poolID4v].index(ev)]
-                                self.log.info("  Vertex {} equals vertex {} in existing Pool with index {} .".format(v, ev, poolID4v))
+                                self.log.debug("  Vertex {} equals vertex {} in existing Pool with index {} .".format(v, ev, poolID4v))
                                 matchfound = True
                                 break
                             if counter > 2: ##### NEW 31.03.2020: was >=, but == handled above #########
-                                self.log.info("  Vertex {} is at same location as {} but different higher coordinate {}!!".format(v, ev, counter))
+                                self.log.debug("  Vertex {} is at same location as {} but different higher coordinate {}!!".format(v, ev, counter))
                         if not matchfound:       
                             self.dsf.V[poolID4v].append(v)
                             t[vt+3] = [poolID4v, len(self.dsf.V[poolID4v])-1] #change reference in area tria vertex to the last vertex in existing pool
-                            self.log.info("  Vertex {} inserted in existing pool no. {}.".format(v, poolID4v))
+                            self.log.debug("  Vertex {} inserted in existing pool no. {}.".format(v, poolID4v))
                     else: #no existing pool fulfilling requirements was found, so new pool has to be created and added with v
                         if len(self.dsf.V) >= 65535: #reached maximum number of pools, no pool could be added any more
                             self.log.error("DSF File already has maximum number of point pools. Addtional pools required for change can not be added!!!")
                             return -1
                         self.dsf.V.append([v])
-                        self.log.info("New Pool required to insert vertex: {}".format(v))
+                        self.log.debug("New Pool required to insert vertex: {}".format(v))
                         if t[vt+3][0] == None: #completele new tria in completely new patch, so no scaling available
                             scal_id = len(self.dsf.Scalings) - 1  # New 13.8.20: We need to find scaling with at minimum 5 values
                             while len(self.dsf.Scalings[scal_id]) < 5 and scal_id >= 0:
-                                self.log.info("Scaling id {} has not enough coordinates, check for next ...".format(scal_id))
+                                self.log.debug("Scaling id {} has not enough coordinates, check for next ...".format(scal_id))
                                 scal_id -= 1
                             self.dsf.Scalings.append([deepcopy(self.dsf.Scalings[scal_id][0]), deepcopy(self.dsf.Scalings[scal_id][1]),deepcopy(self.dsf.Scalings[scal_id][2]),deepcopy(self.dsf.Scalings[scal_id][3]),deepcopy(self.dsf.Scalings[scal_id][4])]) ############## This is a dirty soltion --- TBD ###############
                             ############################### BAD IMPLEMENTATION ABOVE #### Actually new scaling has to be defined based on area and typical s/t coordinates for that tile ##########################
@@ -1226,7 +1230,7 @@ class muxpArea:
                         ########## HOWEVER NEW VERTEX MIGHT BE OUTSIDE THESE SCALINGS --> check and adapt if required AFTER elevation was adapted as needed
                         if elevscal < 1: #for given submeter elevation pool-scaling has to be adapted
                             if v[2] < -32767:  # In case of Raster elevation take default scaling to avoid rounding errors  ### NEW 27.10.20 ###
-                                self.log.info("First vertex for new Pool has Raster elevation. Create this Pool now with default scaling in order to avoid rounding errors.")
+                                self.log.debug("First vertex for new Pool has Raster elevation. Create this Pool now with default scaling in order to avoid rounding errors.")
                                 self.dsf.Scalings[-1][2][0] = 32268  # so with this Pool we can reach from -32768 to -500m; above use regular Pool (## 65535 * elevscal caused also rounding issues##)
                                 self.dsf.Scalings[-1][2][1] = -32768  # Off-Set is exact RASTER Elevation (for exact matching), no need to go deeper
                             else: ### Following two lines are else
@@ -1235,7 +1239,7 @@ class muxpArea:
                                     self.dsf.Scalings[-1][2][1] = int(-10 + int((v[2] + 10) / (65535 * elevscal)) * (65535 * elevscal))  # offset for elevation of v, starting with -10m allows also small negative values at coasts; for deeper values the check below will set a lower sacaling
                                 else:
                                     self.dsf.Scalings[-1][2][1] = self.elev_base_min  # use same base as original mesh; if new vertices will be lower, pool will be adapted below when scale is checked ## NEW 18.12.20
-                                self.log.info("This new pool received base elevation of {} meters and allows to go additional {} meters up".format(self.dsf.Scalings[-1][2][1], self.dsf.Scalings[-1][2][0]))
+                                self.log.debug("This new pool received base elevation of {} meters and allows to go additional {} meters up".format(self.dsf.Scalings[-1][2][1], self.dsf.Scalings[-1][2][0]))
                         ## Check new scaling for vertex and adapt as required based on multipliers / offsets give
                         scale_checked = False
                         while not scale_checked:
@@ -1247,7 +1251,7 @@ class muxpArea:
                                         v[j] = self.dsf.Scalings[-1][j][1]
                                         t[vt][j] = self.dsf.Scalings[-1][j][1]
                                     else:
-                                        self.log.info("  Vertex in plane {} has value {} and thus lower than allowed scaling minimum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1]))
+                                        self.log.debug("  Vertex in plane {} has value {} and thus lower than allowed scaling minimum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1]))
                                         self.dsf.Scalings[-1][j][1] -= self.dsf.Scalings[-1][j][0] #subtract one scalefactor from base
                                         scale_checked = False #check if new scaling fits
                                         self.log.warning("  Vertex {} does not fit to scaling. Reduced scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
@@ -1257,16 +1261,16 @@ class muxpArea:
                                         v[j] = self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]
                                         t[vt][j] = self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]
                                     else:
-                                        self.log.info("  Vertex in plane {} has value {} and thus higher than allowed scaling maximum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]))
+                                        self.log.debug("  Vertex in plane {} has value {} and thus higher than allowed scaling maximum {}.".format(j, v[j], self.dsf.Scalings[-1][j][1] + self.dsf.Scalings[-1][j][0]))
                                         self.dsf.Scalings[-1][j][1] += self.dsf.Scalings[-1][j][0] #add one scalefactor to base
                                         scale_checked = False #check if new scaling fits
                                         self.log.warning("  Vertex {} does not fit to scaling. Increased scaling base for plane {} to {}!".format(v, j, self.dsf.Scalings[-1][j][1]))
                         poolID4v = len(self.dsf.Scalings) - 1 #ID for the pool is the last one added
-                        self.log.info("  New pool with index {} and scaling {} added to insert vertex {}.".format(poolID4v, self.dsf.Scalings[poolID4v], v))
+                        self.log.debug("  New pool with index {} and scaling {} added to insert vertex {}.".format(poolID4v, self.dsf.Scalings[poolID4v], v))
                         newPools.append(poolID4v)
                         t[vt+3] = [len(self.dsf.V)-1, 0] #change reference in area tria vertex to the first vertex in new pool
                 else:
-                    self.log.info("Vertex {} unchanged. Index to pool {} reused.".format(t[vt], t[vt+3][0]))
+                    self.log.debug("Vertex {} unchanged. Index to pool {} reused.".format(t[vt], t[vt+3][0]))
         return 0
 
     def rasterSquares(self, latS, latN, lonW, lonE):
@@ -1398,16 +1402,16 @@ class muxpArea:
                 if e_part > 0 and e_part < 1: #v must be between two vertices of edge
                     if distance(v, t[e][:2]) > mindist and distance(v, t[(e+1)%3][:2]) > mindist: #v must not be too close to tria edge vertices
                         if abs(dist) < mindist:
-                            self.log.info("   Close edge in tria {} on edge {} found from {} to {} with distance {} --> splitted (e-part: {})  Tria: {}.".format(enum_t, e, t[e], t[(e+1)%3], dist, e_part, t))
+                            self.log.debug("   Close edge in tria {} on edge {} found from {} to {} with distance {} --> splitted (e-part: {})  Tria: {}.".format(enum_t, e, t[e], t[(e+1)%3], dist, e_part, t))
                             new_v = createFullCoords(v[0], v[1], t) #use v now as point of both new trias
                             new_trias.append([ t[e], new_v, t[(e+2)%3], t[3], t[4], t[5], t[6]])
                             new_trias.append([ new_v, t[(e+1)%3], t[(e+2)%3], t[3], t[4], t[5], t[6]])
                             old_trias.append(t)
         for nt in new_trias:
-            self.log.info("   Tria appended: {}".format(nt))
+            self.log.debug("   Tria appended: {}".format(nt))
             trias.append(nt) #update area trias by appending new trias
         for ot in old_trias:
-            self.log.info("   Tria removed: {}".format(ot))
+            self.log.debug("   Tria removed: {}".format(ot))
             if ot[0][2] > 0 or ot[1][2] > 0 or ot[2][2] > 0: ########## ERROR CHECKING ---> TO BE REMOVED ###############
                 self.log.error("          REMOVED TRIA ABOVE ALREADY HAVING ELEVATION")
             if ot in trias: ###### NEW 05.04.2020 ############## WHY REQUIRED after setting relative_mindist from 0.001 to 0.00001??? NOW STILL REQUIRE ??? ############
@@ -1436,15 +1440,15 @@ class muxpArea:
         if len(vertices):
             for vertex in self.getAllVerticesForCoords(vertices):  # set vertices of intervals to correct elevation
                 elev, distSplineLine = interpolatedSegmentElevation([spline_points[0], spline_points[-1]], vertex[:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
-                self.log.info("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
+                self.log.debug("Assigning Spline Elevation for {}, {}  to  {} m at distance {}".format(vertex[1], vertex[0], elev, distSplineLine))  ########### TESTING ONLY ############
                 vertex[2] = elev
         if place_holder_removal:
             for nt, t in enumerate(self.atrias):
                 for v in range(3):
                     if t[v][2] == place_holder_removal:  # adapt all marked vertices with elev. from position on ramp
-                        self.log.info("Getting elevation for: {}".format(t[v][:2]))  ##### TO BE REMOVED ###
+                        self.log.debug("Getting elevation for: {}".format(t[v][:2]))  ##### TO BE REMOVED ###
                         elev, distSplineLine = interpolatedSegmentElevation([spline_points[0], spline_points[-1]], t[v][:2], spline)  #### IMPORTANT: 3d coords not swapped, but interpolation is okay for not swapped #####
-                        self.log.info("Assigning Spline Elevation for {}  to  {} m at distance {}".format(t[v][:2], elev, distSplineLine))  ########### TESTING ONLY ############
+                        self.log.debug("Assigning Spline Elevation for {}  to  {} m at distance {}".format(t[v][:2], elev, distSplineLine))  ########### TESTING ONLY ############
                         t[v][2] = elev
 
     def smooth_elevation_around_poly(self, poly, elevation, dist, probe_inner_vertex=False, error_rate=0.01):
@@ -1474,7 +1478,7 @@ class muxpArea:
                             base_dist = (base_i + 1 - base_in) / 2
                             base_v = [stretched_poly[i][0] + base_dist*(stretched_poly[i_next][0] - stretched_poly[i][0]), stretched_poly[i][1] + base_dist*(stretched_poly[i_next][1] - stretched_poly[i][1])]
                             inner_v = [poly[i][0] + base_dist*(poly[i_next][0] - poly[i][0]), poly[i][1] + base_dist*(poly[i_next][1] - poly[i][1])]
-                            self.log.info("Calculating elevation for vertex: {} with base: {} and inner: {}".format(v[:2], base_v, inner_v))
+                            self.log.debug("Calculating elevation for vertex: {} with base: {} and inner: {}".format(v[:2], base_v, inner_v))
                             if probe_inner_vertex:
                                 #ortho_to_inside = [poly[i_next][1] - poly[i][1], -(poly[i_next][0] - poly[i][0])]
                                 #f = 1 / distance(inner_v, [inner_v[0] + ortho_to_inside[0], inner_v[1] + ortho_to_inside[1]])
@@ -1493,9 +1497,9 @@ class muxpArea:
                                     "No elevation found at base_v {} so elevation not changed!!".format(base_v))
                                 continue
                             base_inner_ratio = min(distance(base_v, v) / distance(base_v, inner_v), 1)  # maximum ratio shall be 1
-                            self.log.info("Elevation at base {} for {} in distance_ratio {} is: {} (elevation inside at {}  : {})".format(base_v, v[:2], base_inner_ratio, elev_base_v, inner_v, elev_inner_v))
+                            self.log.debug("Elevation at base {} for {} in distance_ratio {} is: {} (elevation inside at {}  : {})".format(base_v, v[:2], base_inner_ratio, elev_base_v, inner_v, elev_inner_v))
                             v[2] = elev_base_v + base_inner_ratio * (elev_inner_v - elev_base_v)
-                            self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
+                            self.log.debug("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
                         elif 0 <= base_in <= 1 and 1 - error_rate <= inside_i < 1 and 1 - error_rate <= inside_in < 1:
                             # we are close to edge of poly so we just take elevation at poly
                             if probe_inner_vertex:
@@ -1535,7 +1539,7 @@ class muxpArea:
         dist_elev = []  # elevation of vertices of stretched poly
         for v in stretched_poly:
             dist_elev.append(self.mesh_elevation(v))
-            self.log.info("Mesh elevation at {} is: {}".format(v, dist_elev[-1]))
+            self.log.debug("Mesh elevation at {} is: {}".format(v, dist_elev[-1]))
         for t in self.atrias:
             for v in t[:3]:
                 for i in range(len(poly)):
@@ -1543,11 +1547,11 @@ class muxpArea:
                     a, b = PointLocationInTria(v, [poly[i], stretched_poly[i], stretched_poly[i_next]])
                     if 0 < a < 1 and 0 < b < 1 and 0 < 1 - a - b < 1:
                         v[2] = dist_elev[i_next] + a * (elevation - dist_elev[i_next]) + b * (dist_elev[i] - dist_elev[i_next])
-                        self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
+                        self.log.debug("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
                     a, b = PointLocationInTria(v, [poly[i], poly[i_next], stretched_poly[i_next]])
                     if 0 < a < 1 and 0 < b < 1 and 0 < 1 - a - b < 1:
                         v[2] = dist_elev[i_next] + a * (elevation - dist_elev[i_next]) + b * (elevation - dist_elev[i_next])
-                        self.log.info("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
+                        self.log.debug("Elevation smoothing at {}: Set elevation to: {}".format(v[:2], v[2]))
         poly.append(poly[0])  # set again first and last point equal
         stretched_poly.append(stretched_poly[0])
         return stretched_poly
@@ -1603,7 +1607,7 @@ class muxpArea:
                             break
                     if v[2] == 333333:  # elevation not yet changed, so we are at the end of path
                         v[2] = elev[-1]
-                    self.log.info("Set path elevation for {} to {} meters".format(v[:2], v[2]))
+                    self.log.debug("Set path elevation for {} to {} meters".format(v[:2], v[2]))
 
     def get_mesh_elevation_for_magic_number(self, coords, magic_number=-99999):
         #  when MAGIC NUMBER is used for elevation then elevation is assigned from dsf file instead assigning it

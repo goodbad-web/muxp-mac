@@ -1,0 +1,3 @@
+# Optional CPU acceleration for Apple Silicon and other supported platforms.
+# Install this after requirements.txt when the Numba backend is desired.
+numba>=0.67,<0.68

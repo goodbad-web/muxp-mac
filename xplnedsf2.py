@@ -46,6 +46,20 @@ except ImportError:
 else:
     PY7ZINSTALLED = True
 
+_DSF_PROPERTIES_CACHE = {}
+
+
+def clearDSFpropertiesCache(file=None):
+    """Clear the process-local DSF property cache, optionally for one path."""
+
+    if file is None:
+        _DSF_PROPERTIES_CACHE.clear()
+        return
+    cache_path = path.abspath(file)
+    for key in tuple(_DSF_PROPERTIES_CACHE):
+        if key[0] == cache_path:
+            del _DSF_PROPERTIES_CACHE[key]
+
 
 
 class XPLNEpatch:
@@ -1142,7 +1156,13 @@ def getDSFproperties(file):
     """
     if not path.isfile(file):
         return -1, "ERROR in getDSFproperties: File {} does not exist!".format(file)
-    flength = stat(file).st_size  # length of dsf-file
+    file_stat = stat(file)
+    cache_key = (path.abspath(file), file_stat.st_mtime_ns, file_stat.st_size)
+    cached = _DSF_PROPERTIES_CACHE.get(cache_key)
+    if cached is not None:
+        return 0, dict(cached)
+
+    flength = file_stat.st_size  # length of dsf-file
     with open(file, "rb") as f:  # Open Tile as binary file for reading
         start = f.read(12)
         if start.startswith(b'7z\xBC\xAF\x27\x1C'):
@@ -1172,6 +1192,7 @@ def getDSFproperties(file):
                 x=bytes.split(b'\x00')
                 for i in range(0, len(x)-1, 2):
                     props_dict[x[i].decode("utf-8")]=x[i+1].decode("utf-8")
+                _DSF_PROPERTIES_CACHE[cache_key] = dict(props_dict)
                 return 0, props_dict  # 0 for no error
                 start = 0  # position when going through bytes
                 while bytes.find(b'\x00',start) >= 0:
