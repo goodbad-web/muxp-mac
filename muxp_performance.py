@@ -63,6 +63,18 @@ def default_worker_count():
     return max(1, cpu_count() - 1)
 
 
+def _numba_worker_limit():
+    """Return Numba's configured maximum parallel worker count."""
+
+    if numba is None:
+        return None
+    try:
+        limit = int(numba.config.NUMBA_NUM_THREADS)
+    except (AttributeError, TypeError, ValueError):
+        limit = cpu_count()
+    return max(1, limit)
+
+
 def normalize_worker_count(value):
     """Validate a worker setting and return ``None`` for ``auto``."""
 
@@ -95,9 +107,19 @@ def resolve_backend(mode="auto", triangle_count=0, workers=None):
                 "Numba backend was requested but Numba is unavailable. "
                 "Install it with: python -m pip install -r requirements-accelerated.txt"
             )
-        return BackendInfo(requested, "numba", worker_count, "numba backend requested")
+        return BackendInfo(
+            requested,
+            "numba",
+            min(worker_count, _numba_worker_limit()),
+            "numba backend requested",
+        )
     if numba_available() and triangle_count >= NUMBA_MIN_TRIANGLES:
-        return BackendInfo(requested, "numba", worker_count, "triangle threshold reached")
+        return BackendInfo(
+            requested,
+            "numba",
+            min(worker_count, _numba_worker_limit()),
+            "triangle threshold reached",
+        )
     if not numba_available():
         return BackendInfo(requested, "python", worker_count, "Numba is unavailable")
     return BackendInfo(requested, "python", worker_count, "below Numba triangle threshold")
@@ -267,7 +289,10 @@ if numba is not None:
 
 def _set_numba_threads(workers):
     if numba is not None:
-        numba.set_num_threads(workers)
+        effective_workers = min(workers, _numba_worker_limit())
+        numba.set_num_threads(effective_workers)
+        return effective_workers
+    return workers
 
 
 def update_elevation_array(vertices, polygon, elevation, backend="python", workers=None):

@@ -151,6 +151,22 @@ def test_python_and_numba_ramp_arrays_match():
     assert np.array_equal(python_result, numba_result)
 
 
+@pytest.mark.skipif(not muxp_performance.numba_available(), reason="optional Numba is not installed")
+def test_numba_worker_limit_is_respected(monkeypatch):
+    config = muxp_performance.numba.config
+    original_limit = config.NUMBA_NUM_THREADS
+    original_workers = muxp_performance.numba.get_num_threads()
+    monkeypatch.setattr(config, "NUMBA_NUM_THREADS", 2)
+    try:
+        info = resolve_backend("numba", 1024, 4)
+        assert info.workers == 2
+        assert muxp_performance._set_numba_threads(4) == 2
+        assert muxp_performance.numba.get_num_threads() == 2
+    finally:
+        monkeypatch.setattr(config, "NUMBA_NUM_THREADS", original_limit)
+        muxp_performance.numba.set_num_threads(original_workers)
+
+
 def test_backend_threshold_and_worker_validation():
     assert resolve_backend("python", 500, 1).selected == "python"
     assert resolve_backend("auto", 10, 1).selected == "python"
